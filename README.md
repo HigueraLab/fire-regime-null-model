@@ -1,6 +1,6 @@
 # Null Model of a Fire Regime
 
-An interactive exercise for fire ecology courses (e.g., FORS 333 and FORS 540 at the University of Montana; FOR 326 at the University of Idaho). Students simulate a fire regime in which all variability is due to chance alone, then use the results to compare area-based and point-based fire-history metrics, to see how false positives and false negatives in fire-scar and lake-sediment records affect accuracy and interpretation, and to experience how hard it is to detect a true change in a fire regime against expected random variability.
+An interactive exercise for fire ecology courses developed by P. Higuera (e.g., FORS 333 and FORS 540 at the University of Montana; FOR 326 at the University of Idaho). Students simulate a fire regime in which all variability is due to chance alone, then use the results to compare area-based and point-based fire-history metrics, to see how false positives and false negatives in fire-scar and lake-sediment records affect accuracy and interpretation, and to experience how hard it is to detect a true change in a fire regime against expected random variability.
 
 **Open the exercise:** <https://higueralab.github.io/fire-regime-null-model/>
 
