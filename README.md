@@ -1,7 +1,7 @@
 # fireSim 2026
 
 A null model of a fire regime for Fire Ecology (FORS 333, Univ. of Montana). This
-replaces `fireSim.m` (2012/2020), developed in Matlab (FOR 330, Univ. of Idaho).
+replaces `fireSim.m`, developed in Matlab (2012; FOR 330, Univ. of Idaho).
 
 | File | Purpose |
 |---|---|
