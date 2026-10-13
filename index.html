@@ -1,0 +1,1186 @@
+<!doctype html>
+<html lang="en-US">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="author" content="P. Higuera, University of Montana, W.A. Franke College of Forestry and Conservation">
+<meta name="description" content="A null model of a fire regime: simulate random fire histories and compute fire rotation period, mean fire interval, composite fire intervals, and false positives and negatives.">
+<title>Null Model of a Fire Regime</title>
+<style>
+:root {
+  --text: #1f1f1f; --muted: #4a4a4a; --bg: #ffffff; --panel: #f6f4ef; --line: #c9c4b8;
+  --accent: #70002E; --accent-ink: #ffffff; --focus: #005A9C; --fire: #C8102E;
+  --pts: #005A9C; --fp: #A34700; --fn: #5B2C83; --ok: #1D3C34;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 1.45; }
+a { color: var(--focus); }
+.skip { position: absolute; left: -9999px; top: 0; background: #fff; padding: 8px; z-index: 10; }
+.skip:focus { left: 8px; }
+header { background: var(--accent); color: var(--accent-ink); padding: 14px 20px; }
+header h1 { margin: 0; font-size: 1.45rem; }
+header p { margin: 2px 0 0; font-size: .95rem; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 20px 0; border-bottom: 2px solid var(--accent); background: #fff; }
+.tabs button { font: inherit; font-weight: bold; border: 2px solid var(--line); border-bottom: none; background: var(--panel); color: var(--text); padding: 8px 14px; border-radius: 6px 6px 0 0; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.layout { display: grid; grid-template-columns: 310px minmax(0, 1fr); gap: 18px; padding: 16px 20px 30px; max-width: 1500px; margin: 0 auto; }
+@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); padding: 12px 16px; } }
+aside.controls { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; align-self: start; }
+aside h2 { font-size: 1.1rem; margin: 4px 0 8px; color: var(--accent); }
+fieldset { border: 1px solid var(--line); border-radius: 6px; margin: 0 0 10px; padding: 8px 10px; }
+legend { font-weight: bold; padding: 0 4px; }
+label { display: block; font-size: .92rem; margin: 6px 0 2px; }
+.row { display: flex; gap: 8px; align-items: center; }
+.row > * { flex: 1; }
+input[type=number], select { font: inherit; width: 100%; padding: 5px 6px; border: 1px solid #767676; border-radius: 4px; background: #fff; color: var(--text); }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.radio { display: flex; gap: 14px; flex-wrap: wrap; }
+.radio label, .check label { display: inline-flex; gap: 6px; align-items: center; margin: 2px 0; }
+button.primary, button.secondary { font: inherit; font-weight: bold; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-ink); border: 2px solid var(--accent); }
+button.secondary { background: #fff; color: var(--accent); border: 2px solid var(--accent); }
+button:disabled { opacity: .55; cursor: not-allowed; }
+.expected { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: .92rem; margin: 6px 0 10px; }
+.hint { font-size: .85rem; color: var(--muted); margin: 2px 0 0; }
+.err { color: #9E0000; font-weight: bold; font-size: .92rem; min-height: 1.2em; }
+main section[role=tabpanel] h2 { font-size: 1.2rem; margin: 0 0 6px; color: var(--accent); }
+main section[role=tabpanel] h3 { font-size: 1.02rem; margin: 14px 0 6px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin: 6px 0 10px; }
+.toolbar .field { min-width: 110px; max-width: 15em; }
+.toolbar .field input[type=number], .toolbar .field select { width: 7em; }
+.def { display: block; font-size: .8rem; color: var(--muted); font-weight: normal; }
+.toolbar label { margin-top: 0; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 1100px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+figure { margin: 0; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+figcaption { font-size: .85rem; color: var(--muted); padding: 2px 4px; }
+canvas { display: block; width: 100%; }
+.mapwrap { max-width: 560px; }
+.scale { display: flex; align-items: center; gap: 6px; font-size: .85rem; padding: 2px 4px; flex-wrap: wrap; }
+.scale .bar { width: 120px; height: 12px; border: 1px solid #555; background: linear-gradient(to right, #fff, #191919); }
+.swatch { display: inline-block; width: 12px; height: 12px; border: 1px solid #333; vertical-align: middle; }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; background: #fff; }
+caption { text-align: left; font-weight: bold; padding: 4px 0; }
+th, td { border: 1px solid var(--line); padding: 4px 6px; text-align: left; vertical-align: top; }
+th { background: var(--panel); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#simTable th[scope=row] { width: 42%; min-width: 14em; }
+#simTable td.num { white-space: normal; }
+#sampleTable th[scope=row] { width: 60%; font-weight: normal; }
+#sampleTable tr.grp th { font-weight: bold; text-align: left; border-top: 3px solid #333; }
+#sampleTable tr.g-setup.grp th { background: #ececec; }
+#sampleTable tr.g-true.grp th { background: #1D3C34; color: #fff; }
+#sampleTable tr.g-tree.grp th { background: #005A9C; color: #fff; }
+#sampleTable tr.g-lake.grp th { background: #00695C; color: #fff; }
+#sampleTable tr.g-true:not(.grp) th, #sampleTable tr.g-true td { background: #eef3f1; }
+#sampleTable tr.g-tree:not(.grp) th, #sampleTable tr.g-tree td { background: #eaf2fa; }
+#sampleTable tr.g-lake:not(.grp) th, #sampleTable tr.g-lake td { background: #e7f3f0; }
+.tablewrap { overflow-x: auto; }
+.status { font-size: .95rem; margin: 6px 0; min-height: 1.3em; }
+progress { width: 100%; height: 14px; }
+textarea { width: 100%; font-family: Consolas, "Courier New", monospace; font-size: .85rem; }
+.note { background: #fff; border-left: 4px solid var(--accent); padding: 6px 10px; margin: 8px 0; font-size: .93rem; }
+.about { max-width: 900px; }
+.about h3 { color: var(--accent); }
+[hidden] { display: none !important; }
+footer { font-size: .85rem; color: var(--muted); padding: 10px 20px 24px; max-width: 1500px; margin: 0 auto; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+<header>
+  <h1>Null Model of a Fire Regime</h1>
+  <p>FORS 333 Fire Ecology, University of Montana: how much do fire-history statistics vary by chance alone?</p>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="App sections">
+  <button role="tab" id="tab-about" aria-controls="panel-about" aria-selected="true">About the model</button>
+  <button role="tab" id="tab-sim" aria-controls="panel-sim" aria-selected="false" tabindex="-1">1. Simulate a fire regime</button>
+  <button role="tab" id="tab-sample" aria-controls="panel-sample" aria-selected="false" tabindex="-1">2. Fire history from fire-scarred trees and sediment-charcoal records</button>
+  <button role="tab" id="tab-batch" aria-controls="panel-batch" aria-selected="false" tabindex="-1">3. Summarize statistics from many runs</button>
+</nav>
+
+<div class="layout">
+<aside class="controls" aria-labelledby="ctl-h">
+  <h2 id="ctl-h">Fire regime settings</h2>
+  <form id="params" onsubmit="return false">
+    <fieldset>
+      <legend>Fire-size model</legend>
+      <div class="radio">
+        <label><input type="radio" name="mode" value="realistic" checked> Realistic (power law)</label>
+        <label><input type="radio" name="mode" value="simple"> Simple (squares)</label>
+      </div>
+      <p class="hint"><strong>Use Realistic</strong> for class exercises: elliptical fires with heavy-tailed sizes (many small fires; a few large fires burn most of the area), as in real fire regimes. Simple (square fires, exponential sizes) is the earlier classroom version, kept for comparison.</p>
+    </fieldset>
+    <fieldset>
+      <legend>When, where, how big</legend>
+      <label for="p">Annual probability of a fire (p)</label>
+      <input type="number" id="p" min="0.01" max="1" step="0.01" value="0.5">
+      <label for="size">Mean fire size (% of study area)</label>
+      <input type="number" id="size" min="0.1" max="30" step="0.01" value="2">
+      <div id="amaxRow" hidden>
+        <label for="amax">Largest possible fire (% of study area)</label>
+        <input type="number" id="amax" min="5" max="90" step="1" value="50">
+      </div>
+      <label for="years">Years to simulate</label>
+      <input type="number" id="years" min="50" max="20000" step="50" value="2000">
+    </fieldset>
+    <fieldset>
+      <legend>Regime change (optional)</legend>
+      <div class="check"><label><input type="checkbox" id="chg"> Change the regime partway through</label></div>
+      <div id="chgRow" hidden>
+        <label for="tchg">Year the change starts</label>
+        <input type="number" id="tchg" min="2" step="1" value="1001">
+        <div class="row">
+          <div><label for="pAfter">p after</label><input type="number" id="pAfter" min="0.01" max="1" step="0.01" value="0.5"></div>
+          <div><label for="sizeAfter">Size after (%)</label><input type="number" id="sizeAfter" min="0.1" max="30" step="0.01" value="4"></div>
+        </div>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Random seed</legend>
+      <div class="row">
+        <div><label for="seed" class="visually">Seed</label><input type="number" id="seed" min="1" step="1" value="1"></div>
+        <div style="flex:0 0 auto; align-self:end"><button type="button" class="secondary" id="newSeed">New seed</button></div>
+      </div>
+      <p class="hint">Same seed and settings give the same fire history. Use a new seed for each class replicate.</p>
+    </fieldset>
+    <div class="expected" id="expected" aria-live="polite"></div>
+    <button type="button" class="primary" id="runBtn" style="width:100%">Run simulation</button>
+    <p class="err" id="paramErr" role="alert"></p>
+  </form>
+</aside>
+
+<main id="main" tabindex="-1">
+<!-- ===================== 1. SIMULATE ===================== -->
+<section role="tabpanel" id="panel-sim" aria-labelledby="tab-sim" hidden>
+  <h2>1. Simulate a fire regime</h2>
+  <p class="hint"><strong>Play</strong> animates the fires year by year. <strong>Step: one fire</strong> pauses and adds the next fire, so you can follow one point. <strong>Finish run</strong> adds all remaining fires at once; the statistics table appears when the run is finished. Watch fires accumulate. Pick one point on the map and see whether it burns. Any trend you see in annual area burned arose by chance alone.</p>
+  <div class="toolbar" role="group" aria-label="Playback">
+    <button type="button" class="secondary" id="playBtn" disabled>Play</button>
+    <button type="button" class="secondary" id="stepBtn" disabled title="Pause and add one fire at a time">Step: one fire</button>
+    <button type="button" class="secondary" id="endBtn" disabled title="Add all remaining fires now and show the statistics">Finish run and show statistics</button>
+    <div class="field"><label for="speed">Speed</label>
+      <select id="speed"><option value="10">Slow</option><option value="40" selected>Medium</option><option value="150">Fast</option><option value="600">Very fast</option></select></div>
+    <div class="status" id="yearStatus" aria-live="polite">Press <strong>Run simulation</strong> to start.</div>
+  </div>
+  <div class="grid2">
+    <figure class="mapwrap">
+      <canvas id="mapCv" role="img" aria-label="Map of the study area. No simulation yet."></canvas>
+      <div class="scale"><span>Fires per cell:</span><span>0</span><span class="bar" aria-hidden="true"></span><span id="maxLab">max</span>
+        <span><span class="swatch" style="background:var(--fire)"></span> current fire</span>
+        <span><span class="swatch" style="background:var(--pts)"></span> sample points</span>
+        <span>dashed square: area represented by the trees</span><span><strong style="color:#00695C">×</strong> lake (center pixel)</span></div>
+      <figcaption>Study area (100 × 100 cells). Edges wrap around, so a fire leaving one side continues on the opposite side.</figcaption>
+    </figure>
+    <div>
+      <figure><canvas id="annCv" role="img" aria-label="Annual area burned."></canvas>
+        <figcaption>Annual area burned. The shaded band is the analysis window.</figcaption></figure>
+      <figure style="margin-top:12px"><canvas id="cumCv" role="img" aria-label="Cumulative area burned."></canvas>
+        <figcaption>Cumulative proportion of the study area burned. FRP = years ÷ (cumulative proportion burned).</figcaption></figure>
+    </div>
+  </div>
+
+  <h3>Analysis window (record length)</h3>
+  <div class="toolbar">
+    <div class="field"><label for="wStart">First year</label><input type="number" id="wStart" min="1" step="1" value="1"></div>
+    <div class="field"><label for="wEnd">Last year</label><input type="number" id="wEnd" min="1" step="1" value="2000"></div>
+    <button type="button" class="secondary" data-win="100">Last 100 yr</button>
+    <button type="button" class="secondary" data-win="250">Last 250 yr</button>
+    <button type="button" class="secondary" data-win="500">Last 500 yr</button>
+    <button type="button" class="secondary" data-win="1000">Last 1000 yr</button>
+    <button type="button" class="secondary" data-win="all">Whole run</button>
+  </div>
+  <p class="hint">The default record (2000 yr) is 20 times the FRP (100 yr), so the estimates sit close to theory. Shorter windows mimic real fire-history records: watch the mFRI estimate fall below the FRP and both estimates become more variable.</p>
+
+  <div class="grid2">
+    <div class="tablewrap" style="grid-column: 1 / -1">
+      <table id="simTable"><caption>Fire-history statistics for the analysis window</caption>
+        <thead><tr><th scope="col">Statistic</th><th scope="col">This run</th><th scope="col">Theory (long run)</th><th scope="col">Expected for this record length</th></tr></thead>
+        <tbody><tr><td colspan="4">No simulation yet.</td></tr></tbody></table>
+      <div class="toolbar" style="margin-top:8px">
+        <button type="button" class="secondary" id="copyRow" disabled>Copy results row for class sheet</button>
+        <button type="button" class="secondary" id="copyHead">Copy header row</button>
+      </div>
+      <label for="clipText" class="hint">Copied text (tab-separated; paste into one row of the class Google Sheet):</label>
+      <textarea id="clipText" rows="2" readonly></textarea>
+    </div>
+    <figure><canvas id="histCv" role="img" aria-label="Histogram of fires per cell."></canvas>
+      <figcaption>Number of cells that burned 0, 1, 2, … times in the analysis window.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ===================== 2. SAMPLE ===================== -->
+<section role="tabpanel" id="panel-sample" aria-labelledby="tab-sample" hidden>
+  <h2>2. Fire history from fire-scarred trees and sediment-charcoal records</h2>
+  <p class="hint">This tab illustrates the challenges of inferring fire history from two kinds of records: <strong>fire-scarred trees</strong> (tree rings), used mainly in low- to mixed-severity fire regimes where trees survive fire and record it as a scar, and <strong>sediment-charcoal records</strong> (e.g., lake sediments), used mainly in high- and mixed-severity regimes where fire kills most or many trees. In the model, both records are perfect unless you change the false-negative and false-positive settings below.</p>
+  <p class="hint">The sample points are <strong>fire-scarred trees</strong> (blue squares). Together they are meant to record the fire history of the <strong>sampled area</strong> (dashed square): the square spanned by the trees, extended beyond the outer trees by half the distance between trees, so each tree sits at the center of the area it represents. A <strong>composite fire year</strong> is any year in which at least the chosen number of trees were scarred. The mean interval between composite fire years is the <strong>mean composite fire return interval (mCFRI)</strong>.</p>
+  <p class="hint"><strong>Sediment-charcoal record (lake, ×):</strong> the center pixel represents a lake whose sediments record every fire that burns that pixel. Cells have no fixed units, so lake size is set relative to the cell size and to fire size: when fires typically span many cells, treating the lake as a single cell is realistic. Lake-sediment records are the main tool for inferring fire history in high- and mixed-severity fire regimes, where fire kills most or many trees and FRPs are generally a century or longer. In low- and mixed-severity regimes with FRPs under about 75 years, tree-ring (fire-scar) records are more useful, and necessary to resolve individual fires.</p>
+  <p class="hint"><strong>Rule of thumb:</strong> if the FRP is longer than about 100 years, fire scars are unlikely to be the record you rely on; if the FRP is shorter than about 50 years, lake sediments are unlikely to resolve individual fires. The default FRP (100 yr) sits at that boundary, in mixed-severity territory, so both records apply here.</p>
+  <p class="hint"><strong>Truth</strong> is the fire regime of the sampled area: the expected FRP, which equals the expected mFRI at every point in it. Because fire is patchy, a single fire often burns only part of the sampled area. The composite, however, treats every composite fire year as a fire across the whole sampled area.</p>
+  <ul class="hint">
+    <li><strong>False positive (▲):</strong> a composite fire is registered, but most of the sample area did not burn (for example, a small fire that scarred a few trees, or a scar not caused by fire). False positives make the mCFRI too short.</li>
+    <li><strong>False negative (▼):</strong> most of the sample area burned, but no composite fire is registered (too few trees were scarred to pass the minimum, or burned trees did not scar). False negatives make the mCFRI too long.</li>
+  </ul>
+  <fieldset>
+    <legend>Fire-scarred trees</legend>
+    <div class="toolbar">
+      <div class="field"><label for="kSide">Trees (grid)</label>
+        <select id="kSide"><option value="2">4 (2 × 2)</option><option value="3" selected>9 (3 × 3)</option><option value="4">16 (4 × 4)</option><option value="5">25 (5 × 5)</option></select></div>
+      <div class="field"><label for="spacing">Spacing (cells)</label><input type="number" id="spacing" min="1" max="40" step="1" value="4"></div>
+      <div class="field"><label for="minRec">Minimum trees recording</label><input type="number" id="minRec" min="1" max="25" step="1" value="4"></div>
+      <div class="field"><label for="pRec">Chance of a false negative<span class="def">per burned tree: the tree burns but no fire scar forms</span></label><input type="number" id="pRec" min="0" max="0.9" step="0.05" value="0"></div>
+      <div class="field"><label for="pFalse">Chance of a false positive<span class="def">per tree per year: a scar attributed to fire that was not from a fire</span></label><input type="number" id="pFalse" min="0" max="0.05" step="0.001" value="0"></div>
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>Sediment-charcoal record (lake, center pixel ×)</legend>
+    <div class="toolbar">
+      <div class="field"><label for="lakePRec">Chance of a false negative<span class="def">per fire at the lake: fire burns the lake pixel but no charcoal peak is recorded</span></label><input type="number" id="lakePRec" min="0" max="0.9" step="0.05" value="0"></div>
+      <div class="field"><label for="lakePFalse">Chance of a false positive<span class="def">per year: a charcoal peak attributed to fire that was not from a fire</span></label><input type="number" id="lakePFalse" min="0" max="0.05" step="0.001" value="0"></div>
+    </div>
+  </fieldset>
+  <p class="hint">The default is 9 trees, 4 cells apart (a 13 × 13-cell sampled area), with a fire counted if at least 4 trees are scarred. By default both records are perfect (chances of a false negative and of a false positive are 0). Lowering the minimum number of trees adds small, partial fires to the composite (more false positives); raising it drops them (more false negatives). Real studies use filters such as "≥ 25% of trees scarred." These settings also apply to <em>Many runs</em>.</p>
+  <p class="err" id="sampleErr" role="alert"></p>
+  <div class="grid2">
+    <figure class="mapwrap"><canvas id="zoomCv" role="img" aria-label="Zoomed map of the sampled area."></canvas>
+      <figcaption>Zoomed view of the fire-scarred trees (blue squares) and the area they represent (dashed square), shaded by fires per cell in the analysis window.</figcaption></figure>
+    <div class="tablewrap">
+      <table id="sampleTable"><caption>Composite fire-scar record vs. the fire history of the sampled area</caption>
+        <thead><tr><th scope="col">Statistic</th><th scope="col">Value</th></tr></thead>
+        <tbody><tr><td colspan="2">Run a simulation first.</td></tr></tbody></table>
+    </div>
+  </div>
+  <figure style="margin-top:14px"><canvas id="scarCv" role="img" aria-label="Fire-scar chart."></canvas>
+    <figcaption>Fire-scar chart for the analysis window. Each tree row: | = recorded scar, ○ = fire that burned the tree but left no scar, × = false positive (a scar attributed to fire that was not from a fire). Composite row: ▲ = false positive (composite fire registered, but most of the sample area did not burn); ▼ = false negative (most of the sample area burned, but no composite fire registered). Sediment-charcoal row: | = fire recorded at the lake; ▲ = false positive (charcoal peak recorded, but no fire burned the pixel with the lake); ▼ = false negative (fire burned the pixel with the lake, but no charcoal peak recorded). The table reports exact false positives and negatives per point.</figcaption></figure>
+</section>
+
+<!-- ===================== 3. MANY RUNS ===================== -->
+<section role="tabpanel" id="panel-batch" aria-labelledby="tab-batch" hidden>
+  <h2>3. Summarize statistics from many runs</h2>
+  <p class="hint">Every run uses identical settings. Differences between runs are due to chance alone. Use this to judge whether a difference between two real fire histories is larger than chance.</p>
+  <div class="toolbar">
+    <div class="field"><label for="nReps">Number of runs</label><input type="number" id="nReps" min="5" max="1000" step="5" value="100"></div>
+    <div class="field"><label for="bWin">Window</label>
+      <select id="bWin"><option value="all">Whole run</option><option value="win">Analysis window from tab 1</option><option value="chg">Before vs. after regime change</option></select></div>
+    <button type="button" class="primary" id="batchBtn">Run many</button>
+    <button type="button" class="secondary" id="recLenBtn">Record-length experiment</button>
+    <button type="button" class="secondary" id="csvBtn" disabled>Download results (CSV)</button>
+    <button type="button" class="secondary" id="cancelBtn" hidden>Cancel</button>
+  </div>
+  <progress id="prog" max="100" value="0" hidden aria-label="Progress of many runs"></progress>
+  <p class="status" id="batchStatus" aria-live="polite"></p>
+  <div id="batchOut" hidden>
+    <div class="tablewrap"><table id="batchTable"><caption>Summary across runs</caption><thead></thead><tbody></tbody></table></div>
+    <div class="note" id="detectNote" hidden></div>
+    <div class="grid2" style="margin-top:12px">
+      <figure><canvas id="bFrp" role="img" aria-label="Histogram of FRP across runs."></canvas><figcaption id="bFrpCap">Fire rotation period. Dashed line: expected value.</figcaption></figure>
+      <figure><canvas id="bMfi" role="img" aria-label="Histogram of mFRI across runs."></canvas><figcaption>Mean fire return interval (mFRI), pooled across all points. Dotted line: theory (= FRP); dashed line: expected estimate for this record length.</figcaption></figure>
+      <figure><canvas id="bMcfi" role="img" aria-label="Histogram of mCFRI across runs."></canvas><figcaption>Mean composite fire return interval (mCFRI) from the sample trees. Dotted line: FRP (= theoretical mFRI at a point).</figcaption></figure>
+    </div>
+  </div>
+  <div id="recLenOut" hidden>
+    <figure style="margin-top:12px"><canvas id="rlCv" role="img" aria-label="Record-length experiment."></canvas>
+      <figcaption>FRP estimated from the first 50–1000 yr of each run (log scale). Bars: middle 95% of runs; dot: median; dashed line: expected FRP.</figcaption></figure>
+    <div class="tablewrap" style="margin-top:8px"><table id="rlTable"><caption>Record-length experiment</caption><thead></thead><tbody></tbody></table></div>
+  </div>
+</section>
+
+<!-- ===================== ABOUT ===================== -->
+<section role="tabpanel" id="panel-about" aria-labelledby="tab-about" class="about">
+  <h2>About the model</h2>
+  <p>A <strong>null model</strong> generates fire histories in which all variability is random: there are no trends, climate forcing, fire-fuel feedbacks, or spatial gradients. Any pattern in its output arose by chance. That makes it a yardstick for real fire histories.</p>
+  <h3>Rules</h3>
+  <ul>
+    <li><strong>When:</strong> each year, one fire occurs with probability <em>p</em> (at most one fire per year).</li>
+    <li><strong>Where:</strong> the fire starts at a random cell on a homogeneous 100 × 100 landscape. Edges wrap around.</li>
+    <li><strong>How big:</strong> <em>Realistic</em> mode (recommended) and <em>Simple</em> mode differ here. <em>Simple</em> mode uses square fires with exponentially distributed side lengths. <em>Realistic</em> mode uses elliptical fires (random orientation, length:breadth 1–3) with areas from a truncated power law. Both modes are tuned to the same mean fire size, so the expected FRP is the same: <strong>FRP = 1 ÷ (p × mean fire size)</strong>.</li>
+  </ul>
+  <h3>Statistics</h3>
+  <ul>
+    <li><strong>Fire rotation period (FRP):</strong> years ÷ (total area burned ÷ study area). An area-based measure.</li>
+    <li><strong>Mean fire return interval (mFRI):</strong> the average time between successive fires at the same point. The app measures every interval between two fires at the same cell (both fires inside the analysis window) and averages all of them across all cells ("pooled"). This is a point-based measure, like a fire-scar study that samples every point on the landscape.</li>
+    <li><strong>Mean composite fire return interval (mCFRI):</strong> the average time between fire years recorded by any of the sample trees (or by at least the chosen number of trees).</li>
+  </ul>
+  <h3>Fire-scar records, composite fire years, and false positives and negatives</h3>
+  <p>Tab 2 mimics a fire history built from fire-scarred trees, which applies to low- to mixed-severity fire regimes where trees survive fire. A few trees sample an area. Any year in which at least the chosen number of trees were scarred becomes a composite fire year, and the mean interval between composite fire years (mCFRI) is used to estimate the fire regime of the sampled area. Because fires are patchy, a small fire that scarred a few trees is still registered as a composite fire. When most of the sample area did not burn, that is a false positive, which shortens the mCFRI. When most of the sample area burned but too few trees were scarred to pass the minimum (or, if that setting is changed, burned trees did not scar), no composite fire is registered: a false negative, which lengthens the mCFRI. The minimum number of trees recording sets the balance between the two.</p>
+  <h3>Lake-sediment records</h3>
+  <p>Rule of thumb: if the FRP is longer than about 100 years, fire scars are unlikely to be the record you rely on; if the FRP is shorter than about 50 years, lake sediments are unlikely to resolve individual fires. The default FRP (100 yr) sits at that boundary, in mixed-severity territory, so both records apply here. The center pixel (×) represents a lake whose sediments record every fire that burns that pixel. Lake-sediment records are the main tool for inferring fire history in high- and mixed-severity fire regimes, where fire kills most or many trees and FRPs are generally a century or longer. In low- and mixed-severity regimes with FRPs under about 75 years, tree-ring (fire-scar) records are more useful, and necessary to resolve individual fires. Cells have no fixed units, so lake size is set relative to the cell size and to fire size: when fires typically span many cells, treating the lake as a single cell is a reasonable assumption.</p>
+  <p>On tab 2, both records (fire-scarred trees and sediment charcoal) can be made imperfect with the same two settings: the chance of a false negative (a fire occurs but is not recorded) and the chance of a false positive (a scar or charcoal peak attributed to fire that was not from a fire).</p>
+  <h3>FRP and mFRI: the same in theory</h3>
+  <p>In a uniform fire regime, the FRP and mFRI are equal, provided enough time is sampled. In this model each cell burns in a given year with probability p × (mean fire size), so mFRI = FRP = 1 ÷ (p × mean fire size) exactly.</p>
+  <p>Estimates from a finite record can differ. FRP estimates vary by chance. The mFRI estimate is also biased low when the record is short relative to the FRP, because intervals longer than the record cannot be observed and long intervals are less likely to fit inside it. With the default record (2000 yr, 20 times the FRP of 100 yr), the expected mFRI estimate is 95% of the FRP; at 10 times, 89%; at 5 times, 76%.</p>
+  <h3>Simplifications</h3>
+  <ul>
+    <li>No fire-fuel feedbacks: real fire probability often depends on time since the last fire.</li>
+    <li>A homogeneous landscape with geometric fire shapes: topography and fuels do not vary at all, and there are no unburned islands or refugia.</li>
+    <li>Realistic-mode power-law exponents are set by matching the mean fire size, not fitted to data.</li>
+    <li>Our fire-history records record fire perfectly, unless parameters are changed otherwise (e.g., a tree experiences fire but does not leave a fire scar).</li>
+  </ul>
+  <h3>Credits and acknowledgement of AI use</h3>
+  <p>Model concept and original MATLAB code (fireSim.m, 2012): P. Higuera, W.A. Franke College of Forestry and Conservation, University of Montana. This web app, the R translation, and the model revisions were developed with AI assistance from Claude (Opus 5.5, model claude-opus-5-5; Anthropic) in October 2026 and reviewed by P. Higuera. The full model specification and the R reference code accompany this app.</p>
+</section>
+</main>
+</div>
+<footer>FORS 333 Fire Ecology, University of Montana. Version 1.0, October 2026. Developed with AI assistance (Claude Opus 5.5, Anthropic) and reviewed by P. Higuera.</footer>
+
+<script>
+// firesim_core.js -- JavaScript implementation of MODEL_SPEC.md (FORS 333 null model
+// of a fire regime). Same rules as R/firesim.R; independent random-number stream.
+// P. Higuera, University of Montana. Original MATLAB model 2012; JS version 2026.
+// AI-use acknowledgement: developed with AI assistance from Claude (Opus 5.5,
+// model claude-opus-5-5; Anthropic), October 2026, and reviewed by P. Higuera.
+// Cell ids are 0-based: id = x * n + y, with x, y in 0..n-1.
+
+const FireSim = (() => {
+  "use strict";
+
+  // ---- random numbers (seedable) ----
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function randInt(rng, n) { return Math.floor(rng() * n); }   // 0..n-1
+
+  // ---- fire-size distributions ----
+  function simpleMeanCells(m, n) {           // E[min(side, n)^2], side = ceil(Exp(mean m))
+    const q = 1 - Math.exp(-1 / m);
+    let pk = q, s = 0;
+    for (let k = 1; k < 20000; k++) {
+      const side = Math.min(k, n);
+      s += side * side * pk;
+      pk *= (1 - q);
+      if (pk < 1e-300) break;
+    }
+    return s;
+  }
+  function paretoMean(beta, amin, amax) {
+    if (Math.abs(beta - 1) < 1e-9) return (amax - amin) / Math.log(amax / amin);
+    if (Math.abs(beta - 2) < 1e-9) return Math.log(amax / amin) / (1 / amin - 1 / amax);
+    const num = (Math.pow(amax, 2 - beta) - Math.pow(amin, 2 - beta)) / (2 - beta);
+    const den = (Math.pow(amax, 1 - beta) - Math.pow(amin, 1 - beta)) / (1 - beta);
+    return num / den;
+  }
+  function bisect(f, lo, hi, target, increasing) {
+    for (let i = 0; i < 200; i++) {
+      const mid = (lo + hi) / 2;
+      if ((f(mid) < target) === increasing) lo = mid; else hi = mid;
+    }
+    return (lo + hi) / 2;
+  }
+  const parCache = new Map();
+  function sizeParams(mode, meanSizeFrac, n, amaxFrac) {
+    const key = [mode, meanSizeFrac, n, amaxFrac].join("|");
+    if (parCache.has(key)) return parCache.get(key);
+    const A = n * n, target = meanSizeFrac * A;
+    let par;
+    if (mode === "simple") {
+      if (meanSizeFrac > 0.8) throw new Error("Mean fire size must be at most 80% in simple mode.");
+      par = { mode, m: bisect(m => simpleMeanCells(m, n), 0.05, 500, target, true) };
+    } else if (mode === "realistic") {
+      const amin = 1, amax = amaxFrac * A;
+      if (!(amaxFrac > 0 && amaxFrac <= 0.9)) throw new Error("Largest fire must be between 0 and 90% of the study area.");
+      if (target <= 2 || target >= 0.95 * (amin + amax) / 2)
+        throw new Error("Mean fire size is out of range for realistic mode: it must be well below half of the largest fire size.");
+      par = { mode, beta: bisect(b => paretoMean(b, amin, amax), 0, 4, target, false), amin, amax };
+    } else throw new Error("mode must be 'simple' or 'realistic'");
+    parCache.set(key, par);
+    return par;
+  }
+  function drawSize(rng, par) {
+    const u = rng();
+    if (par.mode === "simple") return Math.ceil(-par.m * Math.log(1 - u));   // side length
+    const b = par.beta, a0 = par.amin, a1 = par.amax;
+    if (Math.abs(b - 1) < 1e-9) return a0 * Math.pow(a1 / a0, u);
+    const e = 1 - b;
+    return Math.pow(Math.pow(a0, e) + u * (Math.pow(a1, e) - Math.pow(a0, e)), 1 / e);  // area (cells)
+  }
+
+  // ---- fire footprint ----
+  function footprint(rng, par, size, cx, cy, n) {
+    let dx, dy, k;
+    if (par.mode === "simple") {
+      const s = Math.max(1, Math.min(size, n));
+      const o0 = Math.floor((s - 1) / 2);
+      k = s * s; dx = new Int32Array(k); dy = new Int32Array(k);
+      let i = 0;
+      for (let a = 0; a < s; a++) for (let b = 0; b < s; b++) { dx[i] = a - o0; dy[i] = b - o0; i++; }
+    } else {
+      k = Math.max(1, Math.round(size));
+      let lb = 1 + 2 * rng();                                  // length:breadth ~ U(1, 3)
+      const amajMax = (n - 3) / 2;
+      lb = Math.max(1, Math.min(lb, Math.PI * amajMax * amajMax / size));
+      const a = Math.sqrt(size * lb / Math.PI), b = Math.sqrt(size / (Math.PI * lb));
+      const th = Math.PI * rng(), c = Math.cos(th), s = Math.sin(th);
+      const h = Math.min(Math.ceil(a) + 1, Math.floor((n - 1) / 2));
+      const w = 2 * h + 1, N = w * w;
+      const r2 = new Float64Array(N), tie = new Float64Array(N), idx = new Uint32Array(N);
+      for (let i = 0; i < N; i++) {
+        const ox = Math.floor(i / w) - h, oy = (i % w) - h;
+        const u = ox * c + oy * s, v = -ox * s + oy * c;
+        r2[i] = (u / a) * (u / a) + (v / b) * (v / b);
+        tie[i] = rng(); idx[i] = i;
+      }
+      k = Math.min(k, N);
+      // Speed-up: only cells inside 1.6x the target ellipse can be among the k closest
+      // (lattice count inside r2 <= 1.6 is ~1.6 x area); fall back to all cells if not.
+      let cand = [];
+      for (let i = 0; i < N; i++) if (r2[i] <= 1.6) cand.push(i);
+      if (cand.length < k) cand = Array.from(idx);
+      const sorted = cand.sort((p, q) => (r2[p] - r2[q]) || (tie[p] - tie[q]));
+      dx = new Int32Array(k); dy = new Int32Array(k);
+      for (let j = 0; j < k; j++) { const i = sorted[j]; dx[j] = Math.floor(i / w) - h; dy[j] = (i % w) - h; }
+    }
+    const cells = new Int32Array(k);
+    for (let j = 0; j < k; j++) {
+      const x = ((cx + dx[j]) % n + n) % n, y = ((cy + dy[j]) % n + n) % n;  // wrap-around
+      cells[j] = x * n + y;
+    }
+    return cells;
+  }
+
+  // ---- simulation ----
+  function simulate(o = {}) {
+    const opt = Object.assign({ nYears: 1000, p: 0.25, meanSizeFrac: 0.02, mode: "simple", n: 100,
+      tChange: null, pAfter: null, meanSizeFracAfter: null, amaxFrac: 0.5, seed: null }, o);
+    if (opt.seed === null || opt.seed === undefined) opt.seed = Math.floor(Math.random() * 1e9);
+    const rng = mulberry32(opt.seed);
+    const n = opt.n;
+    if (opt.pAfter === null) opt.pAfter = opt.p;
+    if (opt.meanSizeFracAfter === null) opt.meanSizeFracAfter = opt.meanSizeFrac;
+    const par1 = sizeParams(opt.mode, opt.meanSizeFrac, n, opt.amaxFrac);
+    const par2 = opt.tChange ? sizeParams(opt.mode, opt.meanSizeFracAfter, n, opt.amaxFrac) : par1;
+    const fires = [];
+    for (let yr = 1; yr <= opt.nYears; yr++) {
+      const after = !!opt.tChange && yr >= opt.tChange;
+      const pp = after ? opt.pAfter : opt.p, par = after ? par2 : par1;
+      if (rng() < pp) {
+        const size = drawSize(rng, par);
+        const cx = randInt(rng, n), cy = randInt(rng, n);
+        const cells = footprint(rng, par, size, cx, cy, n);
+        fires.push({ year: yr, period: after ? 2 : 1, cx, cy, area: cells.length, cells });
+      }
+    }
+    return Object.assign({}, opt, { sizePar: { before: par1, after: par2 }, fires });
+  }
+
+  // ---- sample points ("fire-scarred trees") and the area they represent ----
+  function makeSamplePoints(n = 100, kSide = 2, spacing = 4) {
+    const ctr = Math.floor(n / 2), pts = [];
+    const shift = Math.floor((kSide - 1) * spacing / 2);
+    for (let i = 0; i < kSide; i++) for (let j = 0; j < kSide; j++)
+      pts.push([(((ctr + i * spacing - shift) % n) + n) % n, (((ctr + j * spacing - shift) % n) + n) % n]);
+    return pts;
+  }
+  // Sampled area: the square spanned by the trees, extended beyond the outer trees by
+  // half the tree spacing on every side (floor(spacing / 2) cells), so each tree sits
+  // at the center of the area it represents. A k x k grid with spacing s covers
+  // ((k - 1) s + 2 floor(s / 2) + 1)^2 cells.
+  function sampledAreaMask(n, pts, spacing = 4) {
+    const mask = new Uint8Array(n * n), xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), e = Math.floor(spacing / 2);
+    for (let x = Math.min(...xs) - e; x <= Math.max(...xs) + e; x++)
+      for (let y = Math.min(...ys) - e; y <= Math.max(...ys) + e; y++) mask[(((x % n) + n) % n) * n + (((y % n) + n) % n)] = 1;
+    return mask;
+  }
+
+  // ---- metrics ----
+  // Composite fire-scar record vs. the fire history of the sampled area.
+  //   Truth = the fire regime: expected FRP = expected mFRI at every point.
+  //   False positive (FP): a composite fire registered, but most (>= 50%) of the sampled
+  //     area did not burn that year (includes false scars, where none of it burned).
+  //   False negative (FN): most of the sampled area burned, but no composite fire was
+  //     registered (too few trees scarred, or burned trees that did not scar).
+  //   Area-weighted versions (fpArea, fnArea; in whole-area fires) satisfy exactly:
+  //     composite fire years = area-equivalent fires + fpArea - fnArea.
+  function metrics(sim, o = {}) {
+    const n = sim.n, A = n * n;
+    const opt = Object.assign({ start: 1, end: sim.nYears, pts: makeSamplePoints(n), spacing: 4,
+      minRec: 1, pRecord: 1, pFalse: 0, seed: 12345, keepIntervals: false,
+      lake: [Math.floor(n / 2), Math.floor(n / 2)], lakePRecord: 1, lakePFalse: 0 }, o);
+    const { start, end } = opt, T = end - start + 1;
+    const rng = mulberry32(opt.seed);
+    const ptIndex = new Int32Array(A).fill(-1);
+    opt.pts.forEach((p, i) => { ptIndex[p[0] * n + p[1]] = i; });
+    const mask = sampledAreaMask(n, opt.pts, opt.spacing);
+    let nArea = 0; for (let i = 0; i < A; i++) nArea += mask[i];
+    const last = new Int32Array(A).fill(-1), count = new Int32Array(A);
+    const recTrue = opt.pts.map(() => []), lakeYears = [], lakeId = opt.lake[0] * n + opt.lake[1];
+    const fArea = new Map();                       // year -> fraction of sampled area burned
+    let area = 0, nFires = 0, sumInt = 0, nInt = 0;
+    const ints = opt.keepIntervals ? [] : null;
+    for (const f of sim.fires) {
+      if (f.year < start || f.year > end) continue;
+      nFires++; area += f.area;
+      const y = f.year, c = f.cells;
+      let inArea = 0;
+      for (let j = 0; j < c.length; j++) {
+        const id = c[j];
+        if (last[id] >= 0) { const L = y - last[id]; sumInt += L; nInt++; if (ints) ints.push(L); }
+        last[id] = y; count[id]++;
+        if (ptIndex[id] >= 0) recTrue[ptIndex[id]].push(y);
+        if (mask[id]) inArea++;
+        if (id === lakeId) lakeYears.push(y);
+      }
+      if (inArea > 0) fArea.set(y, inArea / nArea);
+    }
+    const frp = area > 0 ? T / (area / A) : Infinity;
+    const mfri = nInt > 0 ? sumInt / nInt : NaN;
+    let ge2 = 0, unb = 0;
+    for (let i = 0; i < A; i++) { if (count[i] === 0) unb++; if (count[i] >= 2) ge2++; }
+    // tree records (optional missed scars and false scars)
+    const rec = recTrue.map(yrs => {
+      const kept = opt.pRecord < 1 ? yrs.filter(() => rng() < opt.pRecord) : yrs.slice();
+      const missed = yrs.filter(y => !kept.includes(y));
+      const fake = [];
+      if (opt.pFalse > 0) for (let y = start; y <= end; y++) if (rng() < opt.pFalse && !yrs.includes(y)) fake.push(y);
+      return { trueYears: yrs, recorded: kept.concat(fake).sort((a, b) => a - b), missed, fake };
+    });
+    // lake-sediment record at the center cell (optional missed fires and false peaks)
+    const lakeKept = opt.lakePRecord < 1 ? lakeYears.filter(() => rng() < opt.lakePRecord) : lakeYears.slice();
+    const lakeMissed = lakeYears.filter(y => !lakeKept.includes(y)), lakeFake = [];
+    if (opt.lakePFalse > 0) for (let y = start; y <= end; y++) if (rng() < opt.lakePFalse && !lakeYears.includes(y)) lakeFake.push(y);
+    const lakeRec = lakeKept.concat(lakeFake).sort((a, b) => a - b);
+    const tally = new Map();
+    rec.forEach(r => r.recorded.forEach(y => tally.set(y, (tally.get(y) || 0) + 1)));
+    const comp = [...tally.entries()].filter(([, v]) => v >= opt.minRec).map(([y]) => y).sort((a, b) => a - b);
+    const mcfri = comp.length > 1 ? (comp[comp.length - 1] - comp[0]) / (comp.length - 1) : NaN;
+    // tree-level mFRI (mean of each tree's own intervals, pooled across trees; true scars)
+    let tSum = 0, tN = 0;
+    recTrue.forEach(yrs => { for (let i = 1; i < yrs.length; i++) { tSum += yrs[i] - yrs[i - 1]; tN++; } });
+    // sampled-area truth and FP / FN
+    const cset = new Set(comp);
+    let E = 0; fArea.forEach(v => { E += v; });
+    const fpYears = comp.filter(y => (fArea.get(y) || 0) < 1 - 1e-12);
+    const fnYears = [...fArea.keys()].filter(y => !cset.has(y)).sort((a, b) => a - b);
+    let over = 0, under = 0;
+    comp.forEach(y => { over += 1 - (fArea.get(y) || 0); });
+    fnYears.forEach(y => { under += fArea.get(y); });
+    // composite fire years binned by the share of the sampled area that burned
+    const bins = [0, 0, 0, 0, 0, 0];              // 0 (false scar only), <25, 25-50, 50-75, 75-<100, 100%
+    comp.forEach(y => { const v = fArea.get(y) || 0;
+      bins[v === 0 ? 0 : v >= 1 - 1e-12 ? 5 : v < 0.25 ? 1 : v < 0.5 ? 2 : v < 0.75 ? 3 : 4]++; });
+    return {
+      start, end, T, nFires, frp, mfri, nIntervals: nInt,
+      fracGe2: ge2 / A, fracUnburned: unb / A,
+      mcfri, nComposite: comp.length, treeMfri: tN ? tSum / tN : NaN,
+      lakeYears, lakeRec, lakeMissed, lakeFake, nLakeTrue: lakeYears.length, nLake: lakeRec.length,
+      lakeFP: lakeFake.length, lakeFN: lakeMissed.length,
+      lakeMfri: lakeRec.length > 1 ? (lakeRec[lakeRec.length - 1] - lakeRec[0]) / (lakeRec.length - 1) : NaN,
+      nAreaCells: nArea, areaFireYears: fArea.size, areaEquivFires: E,
+      frpArea: E > 0 ? T / E : Infinity,
+      fpMajorYears: comp.filter(y => (fArea.get(y) || 0) < 0.5), fnMajorYears: fnYears.filter(y => fArea.get(y) >= 0.5),
+      fpArea: over, fnArea: under,
+      FP: comp.filter(y => (fArea.get(y) || 0) < 0.5).length, FN: fnYears.filter(y => fArea.get(y) >= 0.5).length, nFpYears: fpYears.length, nFnYears: fnYears.length, fpYears, fnYears, compBins: bins,
+      composite: comp, fArea, records: rec, tally, count, intervals: ints, mask
+    };
+  }
+
+  // ---- analytical expectations ----
+  const expectedFrp = (p, s) => 1 / (p * s);
+  function expectedMfriObs(frp, T) {
+    if (T < 2 || !isFinite(frp)) return NaN;
+    const q = 1 / frp;
+    let num = 0, den = 0, fL = q;
+    for (let L = 1; L < T; L++) { const w = (T - L) * fL; num += L * w; den += w; fL *= (1 - q); }
+    return num / den;
+  }
+  function expectedFrpWindow(sim, start, end) {
+    let burn = 0;
+    for (let y = start; y <= end; y++) {
+      const after = !!sim.tChange && y >= sim.tChange;
+      burn += after ? sim.pAfter * sim.meanSizeFracAfter : sim.p * sim.meanSizeFrac;
+    }
+    return (end - start + 1) / burn;
+  }
+
+  return { mulberry32, simpleMeanCells, paretoMean, sizeParams, drawSize, footprint, simulate,
+    makeSamplePoints, sampledAreaMask, metrics, expectedFrp, expectedMfriObs, expectedFrpWindow };
+})();
+if (typeof module !== "undefined") module.exports = FireSim;
+
+</script>
+<script>
+// app.js -- user interface for the FORS 333 null-model web app.
+// AI-use acknowledgement: developed with AI assistance from Claude (Opus 5.5,
+// model claude-opus-5-5; Anthropic), October 2026, and reviewed by P. Higuera.
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const N = 100, A = N * N;
+const COL = { lake: "#00695C", fire: [200, 16, 46], pts: "#005A9C", fp: "#A34700", fn: "#5B2C83", accent: "#70002E", ink: "#1f1f1f" };
+const S = { sim: null, opt: null, idx: 0, counts: null, playing: false, raf: null, last: 0, carry: 0,
+            m: null, batch: null, batchRows: null, cancel: false, rl: null };
+
+// ------------------------------------------------------------------ formatting
+const r0 = v => Number.isFinite(v) ? Math.round(v).toLocaleString("en-US") : (v === Infinity ? "∞ (no fire)" : "n/a");
+const r1 = v => Number.isFinite(v) ? v.toFixed(1) : "n/a";
+const r2 = v => Number.isFinite(v) ? v.toFixed(2) : "n/a";
+const pct = v => (100 * v).toFixed(1) + "%";
+function fmtTick(v) { if (Math.abs(v) >= 1000) return v.toLocaleString("en-US", { maximumFractionDigits: 0 }); return String(+v.toPrecision(4)); }
+function quant(a, q) { const s = a.filter(Number.isFinite).sort((x, y) => x - y); if (!s.length) return NaN;
+  const h = (s.length - 1) * q, lo = Math.floor(h); return s[lo] + (h - lo) * ((s[lo + 1] ?? s[lo]) - s[lo]); }
+function mean(a) { const s = a.filter(Number.isFinite); return s.length ? s.reduce((x, y) => x + y, 0) / s.length : NaN; }
+function sd(a) { const s = a.filter(Number.isFinite); if (s.length < 2) return NaN; const m = mean(s);
+  return Math.sqrt(s.reduce((x, y) => x + (y - m) ** 2, 0) / (s.length - 1)); }
+
+// ------------------------------------------------------------------ parameters
+function readParams() {
+  const num = id => parseFloat($(id).value);
+  const mode = document.querySelector("input[name=mode]:checked").value;
+  const o = { mode, p: num("p"), meanSizeFrac: num("size") / 100, amaxFrac: num("amax") / 100,
+    nYears: Math.round(num("years")), seed: Math.round(num("seed")), n: N,
+    tChange: null, pAfter: null, meanSizeFracAfter: null };
+  const errs = [];
+  if (!(o.p > 0 && o.p <= 1)) errs.push("Annual probability of fire must be between 0.01 and 1.");
+  if (!(o.meanSizeFrac > 0 && o.meanSizeFrac <= 0.3)) errs.push("Mean fire size must be between 0.1% and 30%.");
+  if (!(o.nYears >= 50 && o.nYears <= 20000)) errs.push("Years to simulate must be between 50 and 20,000.");
+  if (!(o.seed >= 1)) errs.push("Seed must be a whole number of 1 or more.");
+  if (mode === "realistic" && !(o.amaxFrac >= 0.05 && o.amaxFrac <= 0.9)) errs.push("Largest possible fire must be between 5% and 90%.");
+  if ($("chg").checked) {
+    o.tChange = Math.round(num("tchg")); o.pAfter = num("pAfter"); o.meanSizeFracAfter = num("sizeAfter") / 100;
+    if (!(o.tChange >= 2 && o.tChange <= o.nYears)) errs.push("The change year must be between 2 and the number of years simulated.");
+    if (!(o.pAfter > 0 && o.pAfter <= 1)) errs.push("p after the change must be between 0.01 and 1.");
+    if (!(o.meanSizeFracAfter > 0 && o.meanSizeFracAfter <= 0.3)) errs.push("Mean fire size after the change must be between 0.1% and 30%.");
+  }
+  if (!errs.length) {
+    try { FireSim.sizeParams(mode, o.meanSizeFrac, N, o.amaxFrac);
+      if (o.tChange) FireSim.sizeParams(mode, o.meanSizeFracAfter, N, o.amaxFrac); }
+    catch (e) { errs.push(e.message); }
+  }
+  return { o, errs };
+}
+function updateExpected() {
+  const { o, errs } = readParams();
+  $("amaxRow").hidden = o.mode !== "realistic";
+  $("chgRow").hidden = !$("chg").checked;
+  if (errs.length) { $("expected").textContent = "Check the settings below."; $("paramErr").textContent = errs.join(" "); return; }
+  $("paramErr").textContent = "";
+  let t = `Expected FRP = 1 ÷ (${o.p} × ${(100 * o.meanSizeFrac).toFixed(1)}%) = <strong>${r0(FireSim.expectedFrp(o.p, o.meanSizeFrac))} yr</strong>; about ${r0(o.p * o.nYears)} fires.<br>Record length ÷ FRP = ${r1(o.nYears / FireSim.expectedFrp(o.p, o.meanSizeFrac))}.`;
+  if (o.tChange) t += `<br>After year ${o.tChange}: expected FRP = <strong>${r0(FireSim.expectedFrp(o.pAfter, o.meanSizeFracAfter))} yr</strong>.`;
+  if (o.mode === "realistic") t += `<br>Power-law exponent β = ${FireSim.sizeParams("realistic", o.meanSizeFrac, N, o.amaxFrac).beta.toFixed(2)}.`;
+  $("expected").innerHTML = t;
+}
+
+function sampleSettings() {
+  const k = parseInt($("kSide").value, 10), spacing = Math.round(parseFloat($("spacing").value));
+  let minRec = Math.round(parseFloat($("minRec").value));
+  const pRecord = 1 - parseFloat($("pRec").value), pFalse = parseFloat($("pFalse").value);   // pRec input = chance of a false negative
+  const lakePRecord = 1 - parseFloat($("lakePRec").value), lakePFalse = parseFloat($("lakePFalse").value);
+  const errs = [];
+  if (!(spacing >= 1)) errs.push("Spacing must be at least 1 cell.");
+  if (k * spacing > 80) errs.push("The sampled area spans more than 80 cells; reduce the spacing.");
+  if (minRec > k * k) { minRec = k * k; $("minRec").value = minRec; }
+  if (!(minRec >= 1)) errs.push(`Minimum trees recording must be between 1 and ${k * k}.`);
+  if (!(pRecord >= 0.1 && pRecord <= 1)) errs.push("Trees: chance of a false negative must be between 0 and 0.9.");
+  if (!(pFalse >= 0 && pFalse <= 0.05)) errs.push("Trees: chance of a false positive must be between 0 and 0.05.");
+  if (!(lakePRecord >= 0.1 && lakePRecord <= 1)) errs.push("Sediment charcoal: chance of a false negative must be between 0 and 0.9.");
+  if (!(lakePFalse >= 0 && lakePFalse <= 0.05)) errs.push("Sediment charcoal: chance of a false positive must be between 0 and 0.05.");
+  $("sampleErr").textContent = errs.join(" ");
+  minRec = Math.min(Math.max(1, minRec || 1), k * k);
+  return { pts: FireSim.makeSamplePoints(N, k, Math.max(1, spacing || 1)), minRec, k,
+    pRecord: Number.isFinite(pRecord) ? Math.min(1, Math.max(0.1, pRecord)) : 1, pFalse: Math.min(0.05, Math.max(0, pFalse || 0)),
+    lakePRecord: Number.isFinite(lakePRecord) ? Math.min(1, Math.max(0.1, lakePRecord)) : 1, lakePFalse: Math.min(0.05, Math.max(0, lakePFalse || 0)),
+    spacing: Math.max(1, spacing || 1), ok: !errs.length };
+}
+function windowSettings() {
+  const ny = S.sim ? S.sim.nYears : Math.round(parseFloat($("years").value)) || 1000;
+  let a = Math.round(parseFloat($("wStart").value)), b = Math.round(parseFloat($("wEnd").value));
+  if (!(a >= 1)) a = 1; if (!(b <= ny)) b = ny; if (!(b >= a)) b = Math.min(ny, a);
+  $("wStart").value = a; $("wEnd").value = b;
+  return { start: a, end: b };
+}
+function computeMetrics(sim, win, smp, seedOffset = 0) {
+  return FireSim.metrics(sim, { start: win.start, end: win.end, pts: smp.pts, spacing: smp.spacing,
+    minRec: smp.minRec, pRecord: smp.pRecord, pFalse: smp.pFalse, lakePRecord: smp.lakePRecord, lakePFalse: smp.lakePFalse, seed: (sim.seed * 31 + 7 + seedOffset) >>> 0 });
+}
+
+// ------------------------------------------------------------------ canvas helpers
+function setupCanvas(cv, aspect, maxW) {
+  const w = Math.max(240, Math.min(maxW || 99999, cv.parentElement.clientWidth - 12));
+  const h = Math.round(w * aspect), dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  cv.style.width = w + "px"; cv.style.height = h + "px";
+  const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w, h };
+}
+function niceStep(raw) { const mag = Math.pow(10, Math.floor(Math.log10(raw))), r = raw / mag;
+  return (r < 1.5 ? 1 : r < 3 ? 2 : r < 7 ? 5 : 10) * mag; }
+function niceTicks(a, b, n) { if (!(b > a)) b = a + 1; const st = niceStep((b - a) / n), t = [];
+  for (let v = Math.ceil(a / st - 1e-9) * st; v <= b + 1e-9 * st; v += st) t.push(+v.toFixed(10)); return t; }
+function logTicks(a, b) { const t = []; for (let k = Math.floor(Math.log10(a)); k <= Math.ceil(Math.log10(b)); k++)
+  for (const m of [1, 2, 5]) { const v = m * Math.pow(10, k); if (v >= a * 0.999 && v <= b * 1.001) t.push(v); } return t; }
+
+function plot(cv, sp) {
+  const { ctx, w, h } = setupCanvas(cv, sp.aspect || 0.58);
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
+  const m = { l: 64, r: 28, t: sp.title ? 30 : 12, b: 46 };
+  const X0 = m.l, X1 = w - m.r, Y0 = h - m.b, Y1 = m.t;
+  const [xa, xb] = sp.xlim, [ya, yb] = sp.ylim, logy = !!sp.logy, L = Math.log10;
+  const sx = x => X0 + (x - xa) / (xb - xa) * (X1 - X0);
+  const sy = logy ? (y => Y0 - (L(y) - L(ya)) / (L(yb) - L(ya)) * (Y0 - Y1)) : (y => Y0 - (y - ya) / (yb - ya) * (Y0 - Y1));
+  ctx.font = "12px Arial"; ctx.lineWidth = 1;
+  const yt = logy ? logTicks(ya, yb) : niceTicks(ya, yb, 5);
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  yt.forEach(v => { const y = sy(v); ctx.strokeStyle = "#e3e3e3"; ctx.beginPath(); ctx.moveTo(X0, y); ctx.lineTo(X1, y); ctx.stroke();
+    ctx.fillStyle = COL.ink; ctx.fillText(fmtTick(v), X0 - 6, y); });
+  const xt = sp.xticks || niceTicks(xa, xb, Math.max(3, Math.floor((X1 - X0) / 85)));
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  xt.forEach(v => { const x = sx(v); if (x < X0 - 1 || x > X1 + 1) return; ctx.fillStyle = COL.ink; ctx.fillText(sp.xfmt ? sp.xfmt(v) : fmtTick(v), x, Y0 + 6);
+    ctx.strokeStyle = "#555"; ctx.beginPath(); ctx.moveTo(x, Y0); ctx.lineTo(x, Y0 + 4); ctx.stroke(); });
+  ctx.save(); ctx.beginPath(); ctx.rect(X0, Y1, X1 - X0, Y0 - Y1); ctx.clip();
+  for (const Lr of sp.layers) drawLayer(ctx, Lr, sx, sy, Y0, Y1);
+  ctx.restore();
+  ctx.strokeStyle = "#555"; ctx.lineWidth = 1; ctx.strokeRect(X0, Y1, X1 - X0, Y0 - Y1);
+  ctx.fillStyle = COL.ink; ctx.font = "13px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+  ctx.fillText(sp.xlabel || "", (X0 + X1) / 2, h - 4);
+  ctx.save(); ctx.translate(15, (Y0 + Y1) / 2); ctx.rotate(-Math.PI / 2); ctx.textBaseline = "middle"; ctx.fillText(sp.ylabel || "", 0, 0); ctx.restore();
+  if (sp.title) { ctx.font = "bold 14px Arial"; ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText(sp.title, X0, 7); }
+  if (sp.legend) drawLegend(ctx, sp.legend, X1, Y1);
+  if (sp.aria) cv.setAttribute("aria-label", sp.aria);
+}
+function setDash(ctx, d) { ctx.setLineDash(d === "dash" ? [7, 5] : d === "dot" ? [2, 4] : []); }
+function drawLayer(ctx, L, sx, sy, Y0, Y1) {
+  ctx.save();
+  if (L.type === "band") { ctx.fillStyle = L.fill; ctx.fillRect(sx(L.x0), Y1, sx(L.x1) - sx(L.x0), Y0 - Y1); }
+  else if (L.type === "spikes") { ctx.strokeStyle = L.color; ctx.lineWidth = L.width || 1.2; ctx.beginPath();
+    L.x.forEach((x, i) => { const px = Math.round(sx(x)) + 0.5; ctx.moveTo(px, sy(0)); ctx.lineTo(px, sy(L.y[i])); }); ctx.stroke(); }
+  else if (L.type === "step" || L.type === "line") { ctx.strokeStyle = L.color; ctx.lineWidth = L.width || 2; setDash(ctx, L.dash); ctx.beginPath();
+    L.x.forEach((x, i) => { const px = sx(x), py = sy(L.y[i]);
+      if (i === 0) ctx.moveTo(px, py); else { if (L.type === "step") ctx.lineTo(px, sy(L.y[i - 1])); ctx.lineTo(px, py); } }); ctx.stroke(); }
+  else if (L.type === "hist") { for (let i = 0; i < L.counts.length; i++) { if (!L.counts[i]) continue;
+      const x0 = sx(L.edges[i]), x1 = sx(L.edges[i + 1]), y = sy(L.counts[i]);
+      if (L.fill) { ctx.fillStyle = L.fill; ctx.fillRect(x0, y, x1 - x0, sy(0) - y); }
+      ctx.strokeStyle = L.stroke || "#333"; ctx.lineWidth = L.lw || 1; ctx.strokeRect(x0 + (L.inset || 0), y, x1 - x0 - 2 * (L.inset || 0), sy(0) - y); } }
+  else if (L.type === "vline") { ctx.strokeStyle = L.color; ctx.lineWidth = L.lw || 2; setDash(ctx, L.dash); const x = sx(L.x);
+    ctx.beginPath(); ctx.moveTo(x, Y0); ctx.lineTo(x, Y1); ctx.stroke();
+    if (L.label) { ctx.setLineDash([]); ctx.fillStyle = L.color; ctx.font = "12px Arial"; ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText(L.label, x + 4, Y1 + 4); } }
+  else if (L.type === "range") { ctx.strokeStyle = L.color; ctx.fillStyle = L.color; ctx.lineWidth = 3;
+    L.x.forEach((x, i) => { const px = sx(x); if (Number.isFinite(L.lo[i]) && Number.isFinite(L.hi[i])) {
+      ctx.beginPath(); ctx.moveTo(px, sy(L.lo[i])); ctx.lineTo(px, sy(L.hi[i])); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px - 6, sy(L.lo[i])); ctx.lineTo(px + 6, sy(L.lo[i])); ctx.moveTo(px - 6, sy(L.hi[i])); ctx.lineTo(px + 6, sy(L.hi[i])); ctx.stroke(); }
+      if (Number.isFinite(L.mid[i])) { ctx.beginPath(); ctx.arc(px, sy(L.mid[i]), 5, 0, 2 * Math.PI); ctx.fillStyle = "#fff"; ctx.fill(); ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 3; } }); }
+  ctx.restore();
+}
+function drawLegend(ctx, items, X1, Y1) {
+  ctx.font = "12px Arial"; const wMax = Math.max(...items.map(it => ctx.measureText(it.label).width)) + 40;
+  const x = X1 - wMax - 6, y = Y1 + 6, hh = 18 * items.length + 6;
+  ctx.fillStyle = "rgba(255,255,255,0.92)"; ctx.fillRect(x, y, wMax, hh); ctx.strokeStyle = "#999"; ctx.strokeRect(x, y, wMax, hh);
+  items.forEach((it, i) => { const yy = y + 12 + 18 * i; ctx.save();
+    if (it.kind === "box") { if (it.fill) { ctx.fillStyle = it.fill; ctx.fillRect(x + 6, yy - 6, 22, 12); }
+      ctx.strokeStyle = it.stroke || "#333"; ctx.lineWidth = it.lw || 1; ctx.strokeRect(x + 6, yy - 6, 22, 12); }
+    else { ctx.strokeStyle = it.stroke; ctx.lineWidth = it.lw || 2; setDash(ctx, it.dash); ctx.beginPath(); ctx.moveTo(x + 6, yy); ctx.lineTo(x + 28, yy); ctx.stroke(); }
+    ctx.restore(); ctx.fillStyle = COL.ink; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(it.label, x + 34, yy); });
+}
+function histOf(vals, extra = [], nb = 20) {
+  const v = vals.filter(Number.isFinite); if (!v.length) return null;
+  let lo = Math.min(...v, ...extra.filter(Number.isFinite)), hi = Math.max(...v, ...extra.filter(Number.isFinite));
+  if (hi === lo) { hi = lo + 1; }
+  const st = niceStep((hi - lo) / nb); lo = Math.floor(lo / st) * st; hi = (Math.floor(hi / st) + 1) * st;
+  const edges = []; for (let e = lo; e <= hi + st * 1e-6; e += st) edges.push(+e.toFixed(10));
+  return edges;
+}
+function countIn(vals, edges) { const c = new Array(edges.length - 1).fill(0);
+  vals.forEach(x => { if (!Number.isFinite(x)) return; let i = Math.floor((x - edges[0]) / (edges[1] - edges[0])); i = Math.max(0, Math.min(c.length - 1, i)); c[i]++; });
+  return c; }
+
+// ------------------------------------------------------------------ map
+const off = document.createElement("canvas"); off.width = N; off.height = N;
+function drawMap(cv, counts, maxC, curCells, region, smp, maxW) {
+  const g = off.getContext("2d"), img = g.createImageData(N, N), d = img.data;
+  for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) {
+    const c = counts ? counts[x * N + y] : 0, v = maxC > 0 ? 255 - Math.round(230 * Math.min(c, maxC) / maxC) : 255;
+    const p = ((N - 1 - y) * N + x) * 4; d[p] = d[p + 1] = d[p + 2] = v; d[p + 3] = 255; }
+  if (curCells) for (const id of curCells) { const x = Math.floor(id / N), y = id % N, p = ((N - 1 - y) * N + x) * 4;
+    d[p] = COL.fire[0]; d[p + 1] = COL.fire[1]; d[p + 2] = COL.fire[2]; }
+  g.putImageData(img, 0, 0);
+  const { ctx, w, h } = setupCanvas(cv, 1, maxW || 560);
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
+  const ml = 40, mb = 34, mt = 10, mr = 18, side = Math.min(w - ml - mr, h - mb - mt);
+  const { x0, y0, size } = region, cell = side / size;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(off, x0, N - y0 - size, size, size, ml, mt, side, side);
+  ctx.strokeStyle = "#555"; ctx.strokeRect(ml, mt, side, side);
+  // ticks
+  ctx.fillStyle = COL.ink; ctx.font = "12px Arial";
+  const tk = niceTicks(x0, x0 + size, 5);
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  tk.forEach(v => { if (v < x0 || v > x0 + size) return; ctx.fillText(fmtTick(v), ml + (v - x0) * cell, mt + side + 4); });
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  tk.map(v => v - x0 + y0).forEach(v => { if (v < y0 || v > y0 + size) return; ctx.fillText(fmtTick(v), ml - 5, mt + side - (v - y0) * cell); });
+  ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.fillText("x distance (cells)", ml + side / 2, h);
+  ctx.save(); ctx.translate(11, mt + side / 2); ctx.rotate(-Math.PI / 2); ctx.textBaseline = "middle"; ctx.fillText("y distance (cells)", 0, 0); ctx.restore();
+  if (smp) {
+    const toPx = (x, y) => [ml + (x - x0 + 0.5) * cell, mt + (y0 + size - 1 - y + 0.5) * cell];
+    const s = Math.max(5, cell * 0.8);
+    smp.pts.forEach(([x, y]) => { const [px, py] = toPx(x, y); ctx.fillStyle = COL.pts; ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
+      ctx.fillRect(px - s / 2, py - s / 2, s, s); ctx.strokeRect(px - s / 2, py - s / 2, s, s); });
+    // sampled area: the trees' square, extended by half the tree spacing on every side
+    const xs = smp.pts.map(p => p[0]), ys = smp.pts.map(p => p[1]);
+    const e = Math.floor(smp.spacing / 2), ax = Math.min(...xs) - e, ay = Math.min(...ys) - e, side2 = (smp.k - 1) * smp.spacing + 2 * e + 1;
+    const rx = ml + (ax - x0) * cell, ry = mt + (y0 + size - (ay + side2)) * cell, rw = side2 * cell;
+    ctx.setLineDash([]); ctx.lineWidth = 4; ctx.strokeStyle = "#fff"; ctx.strokeRect(rx, ry, rw, rw);
+    ctx.setLineDash([6, 4]); ctx.lineWidth = 2; ctx.strokeStyle = "#000"; ctx.strokeRect(rx, ry, rw, rw); ctx.setLineDash([]);
+    // lake-sediment record at the center pixel (X)
+    const [lx, ly] = toPx(N / 2, N / 2), r = Math.max(6, cell * 0.9);
+    ctx.beginPath(); ctx.moveTo(lx - r, ly - r); ctx.lineTo(lx + r, ly + r); ctx.moveTo(lx + r, ly - r); ctx.lineTo(lx - r, ly + r);
+    ctx.lineWidth = 5; ctx.strokeStyle = "#fff"; ctx.stroke(); ctx.lineWidth = 2.5; ctx.strokeStyle = COL.lake; ctx.stroke();
+  }
+}
+
+// ------------------------------------------------------------------ simulate tab
+function run() {
+  stop();
+  const { o, errs } = readParams();
+  if (errs.length) { $("paramErr").textContent = errs.join(" "); return; }
+  const prevNY = S.sim ? S.sim.nYears : null;
+  S.sim = FireSim.simulate(o); S.opt = o; S.idx = 0; S.counts = new Int32Array(A); S.m = null;
+  S.maxAll = 0; { const c = new Int32Array(A); S.sim.fires.forEach(f => f.cells.forEach(id => c[id]++)); S.maxAll = Math.max(1, ...c); }
+  const ny = S.sim.nYears;
+  if (prevNY === null || +$("wEnd").value === prevNY || +$("wEnd").value > ny) { $("wStart").value = 1; $("wEnd").value = ny; }
+  $("wStart").max = ny; $("wEnd").max = ny;
+  ["playBtn", "stepBtn", "endBtn"].forEach(id => $(id).disabled = false);
+  $("copyRow").disabled = true;
+  $("yearStatus").textContent = `${S.sim.fires.length} fires in ${ny} years. Press Play, or Skip to end.`;
+  drawProgress(); renderResults(false);
+  play();
+}
+function addFires(k) { const f = S.sim.fires; const end = Math.min(f.length, S.idx + k);
+  for (let i = S.idx; i < end; i++) f[i].cells.forEach(id => S.counts[id]++); S.idx = end; }
+function drawProgress() {
+  const sim = S.sim, smp = sampleSettings(), cur = S.idx > 0 && S.idx < sim.fires.length + 1 ? sim.fires[S.idx - 1] : null;
+  const done = S.idx >= sim.fires.length;
+  drawMap($("mapCv"), S.counts, S.maxAll, done ? null : cur && cur.cells, { x0: 0, y0: 0, size: N }, smp);
+  $("maxLab").textContent = S.maxAll + " fires";
+  const yr = cur ? cur.year : 0;
+  $("mapCv").setAttribute("aria-label", `Map of the study area after ${S.idx} of ${sim.fires.length} fires (year ${yr}). Darker cells burned more often; the most-burned cells burned ${Math.max(...S.counts)} times.`);
+  drawTimeSeries(S.idx);
+  if (!done) $("yearStatus").textContent = `Year ${yr} of ${sim.nYears}: fire ${S.idx} of ${sim.fires.length}` + (cur ? ` burned ${pct(cur.area / A)} of the study area.` : ".");
+}
+function drawTimeSeries(k) {
+  const sim = S.sim, fires = sim.fires.slice(0, k), win = windowSettings(), ny = sim.nYears;
+  const maxA = Math.max(0.05, ...sim.fires.map(f => f.area / A)) * 1.08;
+  const band = { type: "band", x0: win.start - 0.5, x1: win.end + 0.5, fill: "rgba(29,60,52,0.10)" };
+  const chg = sim.tChange ? [{ type: "vline", x: sim.tChange, color: COL.accent, dash: "dash", lw: 2, label: "regime change" }] : [];
+  plot($("annCv"), { xlim: [0, ny], ylim: [0, maxA], xlabel: "Year of simulation", ylabel: "Proportion of study area", aspect: 0.48,
+    layers: [band, { type: "spikes", x: fires.map(f => f.year), y: fires.map(f => f.area / A), color: COL.ink, width: Math.max(1.2, 600 / ny) }, ...chg],
+    aria: `Annual area burned for years 1 to ${fires.length ? fires[fires.length - 1].year : 0}. Largest fire burned ${pct(Math.max(0, ...fires.map(f => f.area / A)))} of the study area.` });
+  let cum = 0; const xs = [0], ys = [0];
+  fires.forEach(f => { cum += f.area / A; xs.push(f.year); ys.push(cum); });
+  const totAll = sim.fires.reduce((s, f) => s + f.area / A, 0);
+  // expected cumulative proportion burned: slope = p x mean fire size, changing at the regime change
+  const r1s = sim.p * sim.meanSizeFrac, r2s = (sim.pAfter ?? sim.p) * (sim.meanSizeFracAfter ?? sim.meanSizeFrac);
+  const tc = sim.tChange ? Math.min(ny, sim.tChange - 1) : null;
+  const expLine = tc ? { type: "line", x: [0, tc, ny], y: [0, tc * r1s, tc * r1s + (ny - tc) * r2s], color: "#555", dash: "dash", width: 1.8 }
+                     : { type: "line", x: [0, ny], y: [0, ny * r1s], color: "#555", dash: "dash", width: 1.8 };
+  plot($("cumCv"), { xlim: [0, ny], ylim: [0, Math.max(1, totAll, ny / FireSim.expectedFrpWindow(sim, 1, ny)) * 1.05], xlabel: "Year of simulation",
+    ylabel: "Cumulative proportion burned", aspect: 0.48, layers: [band, expLine, { type: "step", x: xs, y: ys, color: COL.ink, width: 2 }, ...chg],
+    legend: [{ label: "this run", stroke: COL.ink }, { label: "expected", stroke: "#777", dash: "dash", lw: 1.5 }],
+    aria: `Cumulative proportion of the study area burned reached ${cum.toFixed(2)} by year ${xs[xs.length - 1]}.` });
+}
+function play() { if (!S.sim) return; if (S.idx >= S.sim.fires.length) { S.idx = 0; S.counts.fill(0); }
+  S.playing = true; $("playBtn").textContent = "Pause"; S.last = performance.now(); S.carry = 0; S.raf = requestAnimationFrame(tick); }
+function stop() { S.playing = false; if (S.raf) cancelAnimationFrame(S.raf); S.raf = null; $("playBtn").textContent = "Play"; }
+function tick(t) {
+  if (!S.playing) return;
+  const rate = parseFloat($("speed").value); S.carry += (t - S.last) / 1000 * rate; S.last = t;
+  const k = Math.floor(S.carry); if (k > 0) { S.carry -= k; addFires(k); drawProgress(); }
+  if (S.idx >= S.sim.fires.length) { stop(); finish(); return; }
+  S.raf = requestAnimationFrame(tick);
+}
+function finish() { stop(); if (S.idx < S.sim.fires.length) addFires(S.sim.fires.length); renderResults(true); }
+function renderResults(done) {
+  if (!S.sim) return;
+  const sim = S.sim, win = windowSettings(), smp = sampleSettings();
+  if (!done) { $("simTable").tBodies[0].innerHTML = `<tr><td colspan="4">Statistics appear when the run finishes (or press Skip to end).</td></tr>`; return; }
+  const m = computeMetrics(sim, win, smp); S.m = m;
+  // map of the window
+  const wc = m.count, maxW = Math.max(1, ...wc);
+  drawMap($("mapCv"), wc, maxW, null, { x0: 0, y0: 0, size: N }, smp);
+  $("maxLab").textContent = maxW + " fires";
+  $("mapCv").setAttribute("aria-label", `Map of fires per cell for years ${win.start} to ${win.end}. ${pct(m.fracUnburned)} of cells never burned; the most-burned cells burned ${maxW} times.`);
+  $("yearStatus").textContent = `Done: ${sim.fires.length} fires in ${sim.nYears} years. Statistics are for years ${win.start}–${win.end}.`;
+  drawTimeSeries(sim.fires.length);
+  const eF = FireSim.expectedFrpWindow(sim, win.start, win.end), eM = FireSim.expectedMfriObs(eF, m.T);
+  let eFires = 0; for (let y = win.start; y <= win.end; y++) eFires += (sim.tChange && y >= sim.tChange) ? sim.pAfter : sim.p;
+  const ratio = m.T / eF;
+  const rows = [
+    ["Analysis window (record length)", `years ${win.start}–${win.end}: ${m.T.toLocaleString("en-US")} yr = ${r1(ratio)} × FRP`, "", ""],
+    ["Number of fires", r0(m.nFires), r0(eFires), r0(eFires)],
+    ["Fire rotation period (FRP)", r0(m.frp) + " yr", r0(eF) + " yr", "≈ " + r0(eF) + " yr"],
+    [`mFRI: mean fire return interval, pooled across all points (${m.nIntervals.toLocaleString("en-US")} intervals)`, r0(m.mfri) + " yr", r0(eF) + " yr (= FRP)", "≈ " + r0(eM) + " yr"],
+    ["mFRI ÷ FRP", r2(m.mfri / m.frp), "1.00", r2(eM / eF)],
+    [`mCFRI: mean composite fire return interval (${smp.pts.length} trees, ≥ ${smp.minRec} scarred)`, r0(m.mcfri) + " yr", "", "shorter than mFRI"],
+    ["FRP ÷ mCFRI", r2(m.frp / m.mcfri), "", ""],
+    ["FRP of the sampled area (all points within the trees)", r0(m.frpArea) + " yr", r0(eF) + " yr", ""],
+    ["Tree-ring composite: false positives / false negatives", `${m.FP} / ${m.FN}`, "", "see tab 2"],
+    ["Cells never burned / burned ≥ 2 times", `${pct(m.fracUnburned)} / ${pct(m.fracGe2)}`, "", ""]
+  ];
+  $("simTable").tBodies[0].innerHTML = rows.map(r => `<tr><th scope="row">${r[0]}</th><td class="num">${r[1]}</td><td class="num">${r[2]}</td><td class="num">${r[3]}</td></tr>`).join("") +
+    `<tr><td colspan="4" class="hint"><strong>Theory:</strong> in a uniform fire regime the FRP and mFRI are equal, provided enough time is sampled. <strong>Expected for this record length:</strong> the average estimate from a record this long. The mFRI estimate falls below the FRP when the record is short relative to the FRP, because intervals longer than the record cannot be observed (record length ÷ FRP = 5 gives about 0.76 × FRP; 10 gives 0.89; 20 (the default) gives 0.95).</td></tr>`;
+  // histogram of fires per cell
+  const mx = Math.max(...wc), cnt = new Array(mx + 1).fill(0); wc.forEach(c => cnt[c]++);
+  const edges = cnt.map((_, i) => i - 0.5).concat([mx + 0.5]);
+  plot($("histCv"), { xlim: [-0.5, mx + 0.5], ylim: [0, Math.max(...cnt) * 1.1], xlabel: "Number of fires in the window", ylabel: "Number of cells",
+    xticks: niceTicks(0, mx, Math.min(mx, 10)).filter(v => Number.isInteger(v)), aspect: 0.6,
+    layers: [{ type: "hist", edges, counts: cnt, fill: "#9a9a9a", stroke: "#333" }],
+    aria: `Histogram of fires per cell: ${cnt.map((c, i) => `${c} cells burned ${i} times`).slice(0, 12).join("; ")}.` });
+  $("copyRow").disabled = false;
+  renderSample();
+}
+const CLIP_HEAD = ["Mode", "p", "MeanSize_pct", "Years", "WindowStart", "WindowEnd", "nFires", "FRP", "mFRI", "mCFRI", "mFRI_over_FRP", "FRP_over_mCFRI", "FP", "FN", "nTrees", "MinTrees", "Seed"];
+const cl = (v, d) => Number.isFinite(v) ? v.toFixed(d) : "";
+function clipRow() { const s = S.sim, m = S.m, smp = sampleSettings();
+  return [s.mode, s.p, +(100 * s.meanSizeFrac).toFixed(2), s.nYears, m.start, m.end, m.nFires, cl(m.frp, 0), cl(m.mfri, 0), cl(m.mcfri, 0),
+    cl(m.mfri / m.frp, 2), cl(m.frp / m.mcfri, 2), m.FP, m.FN, smp.pts.length, smp.minRec, s.seed].join("\t"); }
+async function copyText(t) { $("clipText").value = t;
+  try { await navigator.clipboard.writeText(t); $("yearStatus").textContent = "Copied to the clipboard. Paste it into the class sheet."; }
+  catch (e) { $("clipText").focus(); $("clipText").select(); try { document.execCommand("copy"); $("yearStatus").textContent = "Copied. Paste it into the class sheet."; }
+    catch (e2) { $("yearStatus").textContent = "Select the text in the box below and copy it (Ctrl+C or Cmd+C)."; } } }
+
+// ------------------------------------------------------------------ sample tab
+function renderSample() {
+  const smp = sampleSettings();
+  $("minRec").max = smp.k * smp.k;
+  if (!S.sim || !S.m || S.idx < S.sim.fires.length) { if (S.sim) drawMap($("zoomCv"), null, 1, null, zoomRegion(smp), smp, 520); return; }
+  const win = windowSettings(), m = computeMetrics(S.sim, win, smp); S.m = m;
+  drawMap($("zoomCv"), m.count, Math.max(1, ...m.count), null, zoomRegion(smp), smp, 520);
+  const side = (smp.k - 1) * smp.spacing + 2 * Math.floor(smp.spacing / 2) + 1;
+  $("zoomCv").setAttribute("aria-label", `Zoomed map of the sampled area (${side} by ${side} cells) with ${smp.pts.length} fire-scarred trees spaced ${smp.spacing} cells apart and the lake (X) at the center.`);
+  const eF = FireSim.expectedFrpWindow(S.sim, m.start, m.end);
+  const G = (label, cls) => ({ group: label, cls });
+  const rows = [
+    G("Setup", "g-setup"),
+    ["Analysis window", `years ${m.start}–${m.end} (${m.T.toLocaleString("en-US")} yr)`, "g-setup"],
+    ["Sampled area (dashed square)", `${smp.pts.length} trees, ${smp.spacing} cells apart; ${side} × ${side} cells`, "g-setup"],
+    G("TRUE fire history", "g-true"),
+    ["Expected FRP = expected mFRI at every point (the fire regime)", r0(eF) + " yr", "g-true"],
+    ["This run: FRP of the sampled area (all of its points)", r0(m.frpArea) + " yr", "g-true"],
+    ["This run: fires that burned the pixel with the lake", m.nLakeTrue, "g-true"],
+    G("Inferred from fire-scarred trees (tree rings)", "g-tree"),
+    [`Mean composite fire return interval (mCFRI; ≥ ${smp.minRec} of ${smp.pts.length} trees scarred)`, r0(m.mcfri) + " yr", "g-tree"],
+    ["mCFRI ÷ expected FRP", r2(m.mcfri / eF), "g-tree"],
+    ["▲ False positives: composite fire registered, but most of the sample area did not burn", m.FP, "g-tree"],
+    ["▼ False negatives: most of the sample area burned, but no composite fire registered", m.FN, "g-tree"],
+    G("Inferred from sediment charcoal (lake ×)", "g-lake"),
+    ["mFRI from sediment charcoal (recorded events)", r0(m.lakeMfri) + " yr", "g-lake"],
+    ["mFRI from sediment charcoal ÷ expected FRP", r2(m.lakeMfri / eF), "g-lake"],
+    ["▲ False positives: charcoal peak recorded, but no fire burned the pixel with the lake", m.lakeFP, "g-lake"],
+    ["▼ False negatives: fire burned the pixel with the lake, but no charcoal peak recorded", m.lakeFN, "g-lake"],
+    ["Fire events in the record (including false positives)", m.nLake, "g-lake"]
+  ];
+  $("sampleTable").tBodies[0].innerHTML = rows.map(r => r.group
+    ? `<tr class="grp ${r.cls}"><th scope="colgroup" colspan="2">${r.group}</th></tr>`
+    : `<tr class="${r[2]}"><th scope="row">${r[0]}</th><td class="num" style="white-space:normal">${r[1]}</td></tr>`).join("");
+  drawScars(m, smp);
+}
+function zoomRegion(smp) {
+  const size = Math.min(N, Math.max(21, smp.k * smp.spacing + 13)); const x0 = Math.max(0, Math.min(N - size, Math.round(N / 2 - size / 2)));
+  return { x0, y0: x0, size }; }
+function drawScars(m, smp) {
+  const cv = $("scarCv"), rows = m.records.length + 2, rh = 22;
+  const { ctx, w } = setupCanvas(cv, 0.1, 99999);
+  const h = (rows + 1) * rh + 110, dpr = window.devicePixelRatio || 1;
+  cv.height = Math.round(h * dpr); cv.style.height = h + "px"; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
+  const X0 = 190, X1 = w - 16, sx = y => X0 + (y - m.start + 0.5) / m.T * (X1 - X0);
+  ctx.font = "12px Arial"; ctx.textBaseline = "middle";
+  const rowY = i => 40 + i * rh + rh / 2;
+  const tick = (x, y, col, lw = 2) => { ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(x, y - 7); ctx.lineTo(x, y + 7); ctx.stroke(); };
+  m.records.forEach((r, i) => { const y = rowY(i);
+    ctx.fillStyle = COL.ink; ctx.textAlign = "right"; ctx.fillText(`Tree ${i + 1}`, X0 - 8, y);
+    ctx.strokeStyle = "#bbb"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(X0, y); ctx.lineTo(X1, y); ctx.stroke();
+    r.recorded.forEach(yr => { if (!r.fake.includes(yr)) tick(sx(yr), y, COL.ink); });
+    r.missed.forEach(yr => { ctx.strokeStyle = "#555"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(sx(yr), y, 4, 0, 2 * Math.PI); ctx.stroke(); });
+    r.fake.forEach(yr => { const x = sx(yr); ctx.strokeStyle = COL.fp; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - 5, y - 5); ctx.lineTo(x + 5, y + 5); ctx.moveTo(x + 5, y - 5); ctx.lineTo(x - 5, y + 5); ctx.stroke(); }); });
+  const yc = rowY(m.records.length) + 4, yl = rowY(m.records.length + 1) + 20;
+  ctx.fillStyle = COL.ink; ctx.textAlign = "right"; ctx.font = "bold 12px Arial";
+  ctx.fillText(`Composite (≥ ${smp.minRec})`, X0 - 8, yc);
+  ctx.font = "bold 12px Arial"; ctx.fillStyle = COL.lake; ctx.fillText("Sediment charcoal (lake ×)", X0 - 8, yl); ctx.font = "12px Arial";
+  m.lakeRec.forEach(yr => { if (!m.lakeFake.includes(yr)) tick(sx(yr), yl, COL.lake, 2.5); });
+  m.lakeMissed.forEach(yr => { const x = sx(yr); ctx.fillStyle = COL.fn; ctx.beginPath(); ctx.moveTo(x, yl + 16); ctx.lineTo(x - 6, yl + 7); ctx.lineTo(x + 6, yl + 7); ctx.closePath(); ctx.fill(); });
+  m.lakeFake.forEach(yr => { const x = sx(yr); ctx.fillStyle = COL.fp; ctx.beginPath(); ctx.moveTo(x, yl - 16); ctx.lineTo(x - 6, yl - 7); ctx.lineTo(x + 6, yl - 7); ctx.closePath(); ctx.fill(); });
+  [yc, yl].forEach(y => { ctx.strokeStyle = "#888"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(X0, y); ctx.lineTo(X1, y); ctx.stroke(); });
+  const fpS = new Set(m.fpMajorYears);
+  m.composite.forEach(yr => { tick(sx(yr), yc, COL.ink, 3); if (fpS.has(yr)) { const x = sx(yr); ctx.fillStyle = COL.fp; ctx.beginPath(); ctx.moveTo(x, yc - 16); ctx.lineTo(x - 6, yc - 7); ctx.lineTo(x + 6, yc - 7); ctx.closePath(); ctx.fill(); } });
+  m.fnMajorYears.forEach(yr => { const x = sx(yr); ctx.fillStyle = COL.fn; ctx.beginPath(); ctx.moveTo(x, yc + 16); ctx.lineTo(x - 6, yc + 7); ctx.lineTo(x + 6, yc + 7); ctx.closePath(); ctx.fill(); });
+  // year axis
+  const ya = rowY(rows) + 22; ctx.strokeStyle = "#555"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(X0, ya); ctx.lineTo(X1, ya); ctx.stroke();
+  ctx.fillStyle = COL.ink; ctx.textAlign = "center"; ctx.textBaseline = "top";
+  niceTicks(m.start, m.end, Math.max(3, Math.floor((X1 - X0) / 90))).forEach(v => { if (v < m.start || v > m.end) return; const x = sx(v);
+    ctx.beginPath(); ctx.moveTo(x, ya); ctx.lineTo(x, ya + 4); ctx.stroke(); ctx.fillText(fmtTick(v), x, ya + 6); });
+  ctx.fillText("Year of simulation", (X0 + X1) / 2, ya + 24);
+  ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.font = "bold 12px Arial"; ctx.fillStyle = COL.fp; ctx.fillText(`▲ False positive: composite fire registered, but most of the sample area did not burn (${m.fpMajorYears.length})`, X0, 4);
+  ctx.fillStyle = COL.fn; ctx.fillText(`▼ False negative: most of the sample area burned, but no composite fire registered (${m.fnMajorYears.length})`, X0, 18);
+  cv.setAttribute("aria-label", `Fire-scar chart, years ${m.start} to ${m.end}. ${m.records.length} trees; the composite record has ${m.nComposite} fire years; fire burned part or all of the sampled area in ${m.areaFireYears} years. Composite fire years in which most of the sampled area did not burn: ${m.fpMajorYears.join(", ") || "none"}. Years in which most of the sampled area burned but the composite has no fire: ${m.fnMajorYears.join(", ") || "none"}.`);
+}
+
+// ------------------------------------------------------------------ many runs
+function batchWindows(o, mode) {
+  if (mode === "all") return [{ label: "whole run", start: 1, end: o.nYears }];
+  if (mode === "win") { const w = windowSettings(); const end = Math.min(w.end, o.nYears); return [{ label: `years ${w.start}-${end}`, start: Math.min(w.start, end), end }]; }
+  if (!o.tChange) return null;
+  return [{ label: "before change", start: 1, end: o.tChange - 1 }, { label: "after change", start: o.tChange, end: o.nYears }];
+}
+function runLoop(total, step, done) {
+  S.cancel = false; let i = 0; $("prog").hidden = false; $("prog").value = 0; $("cancelBtn").hidden = false;
+  ["batchBtn", "recLenBtn", "runBtn"].forEach(id => $(id).disabled = true);
+  const fin = ok => { $("prog").hidden = true; $("cancelBtn").hidden = true; ["batchBtn", "recLenBtn", "runBtn"].forEach(id => $(id).disabled = false); done(ok); };
+  const chunk = () => { const t0 = performance.now();
+    while (i < total && performance.now() - t0 < 40) { step(i); i++; }
+    $("prog").value = Math.round(100 * i / total); $("batchStatus").textContent = `Running: ${i} of ${total} runs…`;
+    if (S.cancel) { $("batchStatus").textContent = `Cancelled after ${i} runs.`; fin(false); return; }
+    if (i < total) setTimeout(chunk, 0); else fin(true); };
+  setTimeout(chunk, 0);
+}
+function runBatch() {
+  const { o, errs } = readParams(); if (errs.length) { $("batchStatus").textContent = errs.join(" "); return; }
+  const smp = sampleSettings(), nReps = Math.max(5, Math.min(1000, Math.round(+$("nReps").value) || 100));
+  const wins = batchWindows(o, $("bWin").value);
+  if (!wins) { $("batchStatus").textContent = "Turn on a regime change (left panel) to compare before vs. after."; return; }
+  const rows = [];
+  $("recLenOut").hidden = true;
+  runLoop(nReps, r => {
+    const seed = (o.seed * 10007 + r + 1) >>> 0, sim = FireSim.simulate(Object.assign({}, o, { seed }));
+    wins.forEach((w, j) => { const m = computeMetrics(sim, w, smp, j);
+      rows.push({ run: r + 1, seed, window: w.label, start: w.start, end: w.end, nFires: m.nFires, FRP: m.frp, mFRI: m.mfri,
+        mCFRI: m.mcfri, FP: m.FP, FN: m.FN, nComposite: m.nComposite, FRP_sampled_area: m.frpArea, lake_mFRI: m.lakeMfri, lake_FP: m.lakeFP, lake_FN: m.lakeFN }); });
+    if (wins.length === 2) {   // no-change reference: a record as long as the post-change record, just before the change
+      const L = wins[1].end - wins[1].start + 1, nw = { start: Math.max(1, wins[1].start - L), end: wins[1].start - 1 };
+      rows[rows.length - 1].FRP_same_length_before = computeMetrics(sim, nw, smp, 2).frp;
+    }
+  }, ok => { if (!rows.length) return; S.batchRows = rows; S.batch = { o, smp, wins, n: rows.length / wins.length };
+    $("csvBtn").disabled = false; renderBatch(); $("batchStatus").textContent = `Done: ${S.batch.n} runs${ok ? "" : " (partial)"}.`; });
+}
+function renderBatch() {
+  const B = S.batch; if (!B) return; const rows = S.batchRows, o = B.o; $("batchOut").hidden = false;
+  const byW = B.wins.map(w => rows.filter(r => r.window === w.label));
+  const exp = B.wins.map(w => { const fake = { tChange: o.tChange, p: o.p, pAfter: o.pAfter ?? o.p, meanSizeFrac: o.meanSizeFrac, meanSizeFracAfter: o.meanSizeFracAfter ?? o.meanSizeFrac };
+    const F = FireSim.expectedFrpWindow(fake, w.start, w.end); return { FRP: F, MFI: FireSim.expectedMfriObs(F, w.end - w.start + 1) }; });
+  const metrics = [["FRP", "FRP (yr)"], ["mFRI", "mFRI, pooled (yr)"], ["mCFRI", "mCFRI, trees (yr)"], ["lake_mFRI", "mFRI, sediment charcoal (yr)"]];
+  const two = B.wins.length > 1;
+  $("batchTable").tHead.innerHTML = `<tr>${two ? '<th scope="col">Window</th>' : ""}<th scope="col">Statistic</th><th scope="col">Expected</th><th scope="col">Mean</th><th scope="col">SD</th><th scope="col">2.5%</th><th scope="col">Median</th><th scope="col">97.5%</th></tr>`;
+  let body = "";
+  byW.forEach((rr, j) => metrics.forEach(([k, lab]) => { const v = rr.map(r => r[k]);
+    const e = (k === "FRP" || k === "lake_mFRI") ? r0(exp[j].FRP) : k === "mFRI" ? "≈ " + r0(exp[j].MFI) + ` (theory ${r0(exp[j].FRP)})` : "";
+    const f = (k === "FP" || k === "FN") ? r1 : r0;
+    body += `<tr>${two ? `<td>${B.wins[j].label}</td>` : ""}<th scope="row">${lab}</th><td class="num">${e}</td><td class="num">${f(mean(v))}</td><td class="num">${f(sd(v))}</td><td class="num">${f(quant(v, .025))}</td><td class="num">${f(quant(v, .5))}</td><td class="num">${f(quant(v, .975))}</td></tr>`; }));
+  const nInf = rows.filter(r => !Number.isFinite(r.FRP)).length;
+  if (nInf) body += `<tr><td colspan="${two ? 8 : 7}" class="hint">${nInf} window(s) had no fire (FRP infinite); they are excluded from the FRP summary.</td></tr>`;
+  $("batchTable").tBodies[0].innerHTML = body;
+  $("batchTable").caption.textContent = `Summary across ${B.n} runs (${o.mode} mode; ${B.smp.pts.length} trees, at least ${B.smp.minRec} recording)`;
+  const styles = [{ fill: "rgba(120,120,120,0.55)", stroke: "#333", lw: 1 }, { fill: null, stroke: COL.accent, lw: 2.5, inset: 1 }];
+  const histPlot = (cv, key, xlabel, lines, title) => {
+    const vals = byW.map(rr => rr.map(r => r[key])), all = vals.flat().filter(Number.isFinite);
+    if (!all.length) { plot(cv, { xlim: [0, 1], ylim: [0, 1], xlabel, ylabel: "Number of runs", layers: [], aria: "No data." }); return; }
+    const hiCap = quant(all, 0.995) * 1.02, capped = vals.map(v => v.map(x => Math.min(x, hiCap)));
+    const edges = histOf(capped.flat(), lines.map(l => l.x)); const cnts = capped.map(v => countIn(v, edges));
+    const ymax = Math.max(...cnts.flat()) * 1.15;
+    const layers = cnts.map((c, j) => Object.assign({ type: "hist", edges, counts: c }, styles[j]));
+    lines.forEach(l => layers.push(Object.assign({ type: "vline" }, l)));
+    const legend = two ? B.wins.map((w, j) => ({ kind: "box", label: w.label, fill: styles[j].fill, stroke: styles[j].stroke, lw: styles[j].lw })) : null;
+    plot(cv, { xlim: [edges[0], edges[edges.length - 1]], ylim: [0, ymax], xlabel, ylabel: "Number of runs", layers, legend, title,
+      aria: `${title || xlabel}: ` + byW.map((rr, j) => `${B.wins[j].label} median ${r0(quant(vals[j], .5))}, middle 95% from ${r0(quant(vals[j], .025))} to ${r0(quant(vals[j], .975))}`).join("; ") + "." });
+  };
+  const eLines = (key) => exp.map((e, j) => ({ x: e[key], color: j ? COL.accent : "#000", dash: "dash", lw: 2 }));
+  histPlot($("bFrp"), "FRP", "Fire rotation period (yr)", eLines("FRP"), "FRP");
+  histPlot($("bMfi"), "mFRI", "Mean fire return interval, mFRI (yr)", eLines("MFI").concat(exp.map((e, j) => ({ x: e.FRP, color: j ? COL.accent : "#000", dash: "dot", lw: 2 }))), "mFRI (pooled across all points)");
+  histPlot($("bMcfi"), "mCFRI", "Mean composite fire return interval, mCFRI (yr)", exp.map((e, j) => ({ x: e.FRP, color: j ? COL.accent : "#000", dash: "dot", lw: 2 })), "mCFRI");
+  // detection note
+  const note = $("detectNote");
+  if (two) { const a = byW[1].map(r => r.FRP), nul = byW[1].map(r => r.FRP_same_length_before);
+    const lenA = B.wins[1].end - B.wins[1].start + 1, lenN = Math.min(lenA, B.wins[1].start - 1);
+    const lowerFrac = a.filter((x, i) => x < nul[i]).length / a.length;
+    const lo = quant(nul, .025), hi = quant(nul, .975), outFrac = a.filter(x => x < lo || x > hi).length / a.length;
+    note.hidden = false;
+    note.innerHTML = `<strong>Can the change be detected?</strong> The fair comparison is with records of the same length that had no change: here, the ${lenN.toLocaleString("en-US")} years just before the change. ` +
+      `With no change, the middle 95% of those FRPs ran from ${r0(lo)} to ${r0(hi)} yr. ` +
+      `<strong>In ${pct(outFrac)} of runs, the FRP after the change (${lenA.toLocaleString("en-US")}-yr record) fell outside that range</strong>, i.e., the change was detectable. ` +
+      `In ${pct(lowerFrac)} of runs the FRP after the change was lower than in the equally long period before it. ` +
+      (lenN < lenA ? `Note: the period before the change is shorter than the period after it, so this comparison is approximate. ` : "") +
+      `Try a later change year (a shorter record after the change) or a smaller change to see when detection fails.`;
+  } else note.hidden = true;
+}
+function runRecLen() {
+  const { o, errs } = readParams(); if (errs.length) { $("batchStatus").textContent = errs.join(" "); return; }
+  const oo = Object.assign({}, o, { tChange: null, pAfter: null, meanSizeFracAfter: null });
+  const smp = sampleSettings(), nReps = Math.max(5, Math.min(1000, Math.round(+$("nReps").value) || 100));
+  const Ls = [50, 100, 250, 500, 1000, 2000, 4000, 10000, 20000].filter(L => L <= oo.nYears), res = Ls.map(() => []);
+  $("batchOut").hidden = true;
+  runLoop(nReps, r => { const sim = FireSim.simulate(Object.assign({}, oo, { seed: (oo.seed * 10007 + r + 1) >>> 0 }));
+    Ls.forEach((L, j) => { const m = computeMetrics(sim, { start: 1, end: L }, smp); res[j].push({ FRP: m.frp, MFI: m.mfri }); }); },
+  ok => { if (!res[0].length) return;
+    const eF = FireSim.expectedFrp(oo.p, oo.meanSizeFrac);
+    const lo = res.map(v => quant(v.map(x => x.FRP), .025)), mid = res.map(v => quant(v.map(x => x.FRP), .5)), hi = res.map(v => quant(v.map(x => x.FRP), .975));
+    const fin = [...lo, ...hi, eF].filter(Number.isFinite), ylo = Math.max(1, Math.min(...fin) / 1.3), yhi = Math.max(...fin) * 1.3;
+    const xs = Ls.map((_, j) => j + 1);
+    $("recLenOut").hidden = false;
+    plot($("rlCv"), { xlim: [0.4, Ls.length + 0.6], ylim: [ylo, yhi], logy: true, xticks: xs, xfmt: v => Ls[v - 1] ? Ls[v - 1] + " yr" : "",
+      xlabel: "Record length (first years of each run)", ylabel: "Estimated FRP (yr, log scale)", aspect: 0.5,
+      layers: [{ type: "line", x: [0.4, Ls.length + 0.6], y: [eF, eF], color: "#555", dash: "dash", width: 1.5 },
+        { type: "range", x: xs, lo, mid, hi, color: COL.accent }],
+      legend: [{ label: "expected FRP", stroke: "#555", dash: "dash", lw: 1.5 }, { label: "middle 95% of runs", stroke: COL.accent, lw: 3 }],
+      aria: "Record-length experiment: " + Ls.map((L, j) => `${L} yr: median FRP ${r0(mid[j])}, middle 95% ${r0(lo[j])} to ${r0(hi[j])}`).join("; ") + "." });
+    $("rlTable").tHead.innerHTML = `<tr><th scope="col">Record length</th><th scope="col">Median FRP</th><th scope="col">Middle 95% of FRP</th><th scope="col">Runs with no fire</th><th scope="col">Mean mFRI</th><th scope="col">Expected mFRI for this record length</th></tr>`;
+    $("rlTable").tBodies[0].innerHTML = Ls.map((L, j) => `<tr><th scope="row">${L} yr</th><td class="num">${r0(mid[j])}</td><td class="num">${r0(lo[j])}–${r0(hi[j])}</td><td class="num">${res[j].filter(x => !Number.isFinite(x.FRP)).length}</td><td class="num">${r0(mean(res[j].map(x => x.MFI)))}</td><td class="num">${r0(FireSim.expectedMfriObs(eF, L))}</td></tr>`).join("") +
+      `<tr><td colspan="6" class="hint">Expected FRP = ${r0(eF)} yr. ${o.tChange ? "The regime change is ignored in this experiment." : ""}</td></tr>`;
+    S.rl = { Ls, res, o: oo };
+    S.batchRows = []; res.forEach((v, j) => v.forEach((x, r) => S.batchRows.push({ run: r + 1, record_length: Ls[j], FRP: x.FRP, mFRI: x.MFI })));
+    $("csvBtn").disabled = false;
+    $("batchStatus").textContent = `Done: record-length experiment with ${res[0].length} runs.`; });
+}
+function downloadCSV() {
+  const rows = S.batchRows; if (!rows || !rows.length) return;
+  const keys = Object.keys(rows[0]), o = S.batch ? S.batch.o : S.rl.o;
+  const meta = `# FORS 333 null model; mode=${o.mode}; p=${o.p}; mean_size_pct=${100 * o.meanSizeFrac}; years=${o.nYears}; base_seed=${o.seed}` + (o.tChange ? `; change_year=${o.tChange}; p_after=${o.pAfter}; size_after_pct=${100 * o.meanSizeFracAfter}` : "");
+  const csv = [meta, keys.join(",")].concat(rows.map(r => keys.map(k => { const v = r[k]; return typeof v === "number" ? (Number.isFinite(v) ? +v.toFixed(3) : "Inf") : `"${v}"`; }).join(","))).join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = `firesim_runs_${o.mode}_seed${o.seed}.csv`; document.body.appendChild(a); a.click(); a.remove();
+}
+
+// ------------------------------------------------------------------ tabs, events
+const tabs = [...document.querySelectorAll("[role=tab]")];
+function showTab(t) { tabs.forEach(b => { const on = b === t; b.setAttribute("aria-selected", on); b.tabIndex = on ? 0 : -1; $(b.getAttribute("aria-controls")).hidden = !on; });
+  redrawAll(); }
+tabs.forEach((t, i) => { t.addEventListener("click", () => showTab(t));
+  t.addEventListener("keydown", e => { let j = null; if (e.key === "ArrowRight") j = (i + 1) % tabs.length; if (e.key === "ArrowLeft") j = (i - 1 + tabs.length) % tabs.length;
+    if (e.key === "Home") j = 0; if (e.key === "End") j = tabs.length - 1; if (j !== null) { e.preventDefault(); tabs[j].focus(); showTab(tabs[j]); } }); });
+function redrawAll() {
+  if (S.sim) { if (S.idx >= S.sim.fires.length) renderResults(true); else drawProgress(); }
+  else { drawMap($("mapCv"), null, 1, null, { x0: 0, y0: 0, size: N }, sampleSettings());
+    drawMap($("zoomCv"), null, 1, null, zoomRegion(sampleSettings()), sampleSettings(), 520); }
+  if (S.batch && !$("batchOut").hidden) renderBatch();
+}
+["p", "size", "amax", "years", "chg", "tchg", "pAfter", "sizeAfter", "seed"].forEach(id => $(id).addEventListener("input", updateExpected));
+document.querySelectorAll("input[name=mode]").forEach(r => r.addEventListener("change", updateExpected));
+$("newSeed").addEventListener("click", () => { $("seed").value = 1 + Math.floor(Math.random() * 999999); updateExpected(); });
+$("runBtn").addEventListener("click", run);
+$("playBtn").addEventListener("click", () => { if (S.playing) stop(); else play(); });
+$("stepBtn").addEventListener("click", () => { stop(); if (S.idx < S.sim.fires.length) { addFires(1); drawProgress(); } if (S.idx >= S.sim.fires.length) finish(); });
+$("endBtn").addEventListener("click", finish);
+["wStart", "wEnd"].forEach(id => $(id).addEventListener("change", () => { if (S.sim && S.idx >= S.sim.fires.length) renderResults(true); else if (S.sim) drawProgress(); }));
+document.querySelectorAll("[data-win]").forEach(b => b.addEventListener("click", () => {
+  const ny = S.sim ? S.sim.nYears : +$("years").value, v = b.dataset.win;
+  $("wEnd").value = ny; $("wStart").value = v === "all" ? 1 : Math.max(1, ny - +v + 1);
+  if (S.sim && S.idx >= S.sim.fires.length) renderResults(true); else if (S.sim) drawProgress(); }));
+["kSide", "spacing", "minRec", "pRec", "pFalse", "lakePRec", "lakePFalse"].forEach(id => $(id).addEventListener("change", () => { if (S.sim && S.idx >= S.sim.fires.length) renderResults(true); else { renderSample(); if (S.sim) drawProgress(); } }));
+$("copyRow").addEventListener("click", () => copyText(clipRow()));
+$("copyHead").addEventListener("click", () => copyText(CLIP_HEAD.join("\t")));
+$("batchBtn").addEventListener("click", runBatch);
+$("recLenBtn").addEventListener("click", runRecLen);
+$("cancelBtn").addEventListener("click", () => { S.cancel = true; });
+$("csvBtn").addEventListener("click", downloadCSV);
+let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(redrawAll, 150); });
+$("seed").value = 1 + Math.floor(Math.random() * 999999);
+updateExpected(); redrawAll();
+})();
+
+</script>
+</body>
+</html>

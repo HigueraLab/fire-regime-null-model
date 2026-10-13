@@ -1,0 +1,193 @@
+---
+title: "A null model of a fire regime: what can fire-history statistics tell us?"
+subtitle: "FORS 333 / graduate supplement"
+author: "P. Higuera, University of Montana"
+format:
+  html:
+    toc: true
+    code-fold: false
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+---
+
+## Why a null model?
+
+A *null model* generates fire histories in which **all variability is random**: there are no trends, no climate forcing, and no fuel feedbacks. Any pattern you see in its output (a "quiet century," a burst of large fires, a site that has not burned in 400 years) arose by chance alone. That makes the model a yardstick. Before we attribute a change in a real fire record to land management or climate, we should ask whether the change is bigger than what chance alone produces.
+
+This walkthrough uses `firesim.R`. The full model specification is in `MODEL_SPEC.md`. Briefly:
+
+- **WHEN:** in each year, a fire occurs with probability *p*.
+- **WHERE:** each fire starts at a random cell on a homogeneous 100 × 100 landscape with wrap-around edges.
+- **HOW BIG:** fire sizes come from either an exponential distribution (*simple* mode: squares) or a power law (*realistic* mode: ellipses). Both modes are tuned to the same mean fire size.
+
+```{r setup}
+source("firesim.R")
+```
+
+This walkthrough uses *p* = 0.25 and a mean fire size of 2% (FRP = 200 yr) throughout. The function defaults (and the web app) use realistic mode, *p* = 0.5, a mean fire size of 2% (largest possible fire 50%), and 2000 yr (FRP = 100 yr), with 9 trees 4 cells apart and at least 4 scarred.
+
+## 1. One fire history
+
+```{r one-run, fig.width = 9, fig.height = 8}
+sim <- simulate_fire_regime(n_years = 10000, p = 0.25, mean_size_frac = 0.02,
+                            mode = "simple", seed = 42)
+sim
+m <- plot_fire_history(sim)
+m
+```
+
+The expected fire rotation period is FRP = 1 / (*p* × mean fire size) = 1 / (0.25 × 0.02) = 200 yr. The record is 10,000 yr, 50 times the FRP, so each point burns about 50 times. Compare the FRP and the mean fire return interval (mFRI) above with 200 yr.
+
+::: {.callout-note}
+## Exercise 1
+Using only `sim$fires` (columns `year` and `area_cells`), calculate the FRP by hand from its definition, FRP = *t* / (Σ*a~i~* / *A*), and confirm that it matches `m$frp`. Then pick one cell, list its fire years with `fs_cell_years(sim$cell, sim$year, x, y, 100)`, and calculate its mFRI.
+:::
+
+## 2. FRP and mFRI: identical in theory, different in practice
+
+**Theory.** Each cell burns in a given year with probability *q* = *p* × mean fire size, independently of other years. The mean interval between fires at a point is therefore 1/*q*, which is exactly the FRP. The area-based measure (FRP) and the point-based measure (mFRI) estimate the same quantity.
+
+**Practice.** We estimate the mFRI by averaging the observed intervals between successive fires at each point, pooled across all points. Only intervals with both fires inside the record can be measured. Run the same regime 50 times with a long (10,000-yr) and a short (1000-yr) record:
+
+```{r reps}
+rr <- run_replicates(50, sim_args = list(n_years = 10000, p = 0.25, mean_size_frac = 0.02), seed = 1,
+                     metric_args = list(sample_pts = make_sample_points(100, 2, 4), min_rec = 1),
+                     windows = list(c(1, 10000), c(1, 1000)), verbose = FALSE)
+aggregate(cbind(frp, mfri, mcfri) ~ T_len, data = rr, FUN = mean)
+```
+
+```{r reps-plot, fig.width = 9, fig.height = 4}
+op <- par(mfrow = c(1, 2))
+for (L in c(10000, 1000)) {
+  d <- rr[rr$T_len == L, ]
+  plot(d$frp, d$mfri, xlab = "FRP (yr)", ylab = "mFRI (yr)", main = paste(L, "yr record"),
+       xlim = c(100, 320), ylim = c(100, 320), pch = 16)
+  abline(0, 1, lty = 2)
+}
+par(op)
+```
+
+Three things to notice:
+
+1. With the 10,000-yr record (50 × FRP), FRP and mFRI both sit close to 200 yr and close to each other.
+2. With the 1000-yr record (5 × FRP), the mFRI falls consistently *below* the FRP. A 1000-yr record cannot contain intervals longer than 1000 yr, long intervals are less likely to fit inside it, and the time before the first fire and after the last fire at each point is discarded. `expected_mfri_obs(200, 1000)` gives the expected estimate (about 152 yr).
+3. The mean composite fire return interval (**mCFRI**, here from 4 trees with a fire counted if any tree is scarred) is shorter still. Compositing four nearby points records fires that burned *any* of them, so the composite interval is shorter than the interval at any single point.
+
+```{r trunc}
+sapply(c(250, 500, 1000, 2000, 5000, 10000), function(T_len) expected_mfri_obs(200, T_len) / 200)
+```
+
+::: {.callout-note}
+## Exercise 2
+(a) How long must a record be, relative to the FRP, before the expected mFRI is within 10% of the FRP? Compare your answer with the guideline "at least 10 fire intervals per point." (b) Show that *T* / mean(fires per cell), averaged over **all** cells (including unburned ones), equals the FRP exactly in every run. Why does this point-based estimate avoid the bias in (a)?
+:::
+
+## 3. Record length and the detectability of change
+
+Real fire histories are short relative to many FRPs. Here we compute FRP from windows of different lengths, first in simple mode.
+
+```{r windows, fig.width = 8, fig.height = 4.5}
+win <- list(c(1, 100), c(1, 250), c(1, 500), c(1, 1000))
+rw <- run_replicates(50, sim_args = list(n_years = 1000, p = 0.25, mean_size_frac = 0.02, mode = "simple"), windows = win,
+                     seed = 2, verbose = FALSE)
+rw$frp[is.infinite(rw$frp)] <- NA            # windows with no fire at all
+boxplot(frp ~ T_len, data = rw, log = "y", xlab = "Record length (yr)",
+        ylab = "Estimated FRP (yr, log scale)", col = "gray85")
+abline(h = 200, lty = 2)
+```
+
+Now repeat the comparison in realistic mode, where a few large fires burn most of the area:
+
+```{r windows-real, fig.width = 8, fig.height = 4.5}
+rw2 <- run_replicates(50, sim_args = list(n_years = 1000, p = 0.25, mean_size_frac = 0.02, mode = "realistic"),
+                      windows = win, seed = 2, verbose = FALSE)
+rw2$frp[is.infinite(rw2$frp)] <- NA
+boxplot(frp ~ T_len, data = rw2, log = "y", xlab = "Record length (yr)",
+        ylab = "Estimated FRP (yr, log scale)", col = "mistyrose")
+abline(h = 200, lty = 2)
+```
+
+::: {.callout-note}
+## Exercise 3
+Why is the *median* FRP from short records biased high in realistic mode, even though the expected FRP is 200 yr in both modes? Connect your answer to the 1910 fires in the annual-area-burned record for the U.S. Northern Rockies.
+:::
+
+## 4. Fire-scar composites, false positives, and false negatives
+
+This section applies to fire histories reconstructed from **fire scars**, and therefore to **low- to mixed-severity fire regimes**, where trees survive fire and record it. The sample points are fire-scarred trees. Together they are meant to record the fire history of the **sampled area**: the square spanned by the trees, extended beyond the outer trees by half the tree spacing, so each tree sits at the center of the area it represents. A composite fire year is any year in which at least `min_rec` trees were scarred. The center cell also represents a **lake-sediment record** (`lake_mfri`): it records every fire that burns that cell. Cells have no fixed units, so when fires typically span many cells, a one-cell lake is a reasonable assumption. Lake-sediment records are the main tool for inferring fire history in high- and mixed-severity fire regimes, where fire kills most or many trees and FRPs are generally a century or longer; tree rings are needed to resolve individual fires where FRPs are under about 100 yr. Rule of thumb: if FRP > ~100 yr, fire scars are unlikely to be the record you rely on; if FRP < ~50 yr, lake sediments are unlikely to resolve individual fires.
+
+**Truth** is the fire regime: the expected FRP, which equals the expected mFRI at every point. Because fire is patchy, a small fire that scarred a few trees is still registered as a composite fire.
+
+- **False positive (`FP`):** a composite fire is registered, but most of the sampled area did not burn (includes scars not caused by fire). False positives shorten the mCFRI.
+- **False negative (`FN`):** most of the sampled area burned, but no composite fire is registered (too few trees scarred, or, if `p_record < 1`, burned trees did not scar). False negatives lengthen the mCFRI.
+
+For advanced work, `fp_area` and `fn_area` give area-weighted versions (in whole-area fires) that account exactly for the composite: `n_composite_fires = area_equiv_fires + fp_area - fn_area`.
+
+```{r fpfn}
+sim <- simulate_fire_regime(1000, p = 0.25, mean_size_frac = 0.02, seed = 7)
+pts9 <- make_sample_points(100, k_side = 3, spacing = 6)    # 9 trees; sampled area 19 x 19 cells
+tab <- do.call(rbind, lapply(1:5, function(k)
+  cbind(min_rec = k,
+        fire_history_metrics(sim, sample_pts = pts9, spacing = 6, min_rec = k,
+                             p_record = 0.7, seed = 1)[, c("n_composite_fires",
+                             "FP", "FN",
+                             "mcfri", "frp_sampled_area")])))
+tab
+```
+
+Here `p_record = 0.7` means a burned tree forms a scar only 70% of the time. Raising `min_rec` is the analog of filters such as "≥ 25% of trees scarred": it trades false positives for false negatives.
+
+::: {.callout-note}
+## Exercise 4
+(a) Using `run_replicates()` with `metric_args = list(sample_pts = pts9, spacing = 6, min_rec = k, p_record = 0.7)`, estimate the mean FP, FN, and mCFRI for *k* = 1–5. Which filter brings the mCFRI closest to the expected FRP (200 yr)? (b) How does the answer change for small fires (`mean_size_frac = 0.005`) vs. large fires (`0.06`)? (c) When would you rather tolerate false positives than false negatives, for example when estimating the maximum fire-free interval for a fire-sensitive species?
+:::
+
+## 5. Can we detect a change in the fire regime?
+
+Suppose fire frequency increases by 50% (*p* from 0.25 to 0.375) in year 501, with fire size unchanged. The FRP drops from 200 to 133 yr.
+
+```{r change, fig.width = 6, fig.height = 4.5}
+rc <- run_replicates(50,
+        sim_args = list(n_years = 1000, p = 0.25, mean_size_frac = 0.02, t_change = 501, p_after = 0.375),
+        windows = list(c(1, 500), c(501, 1000)), seed = 3, verbose = FALSE)
+before <- rc$frp[rc$start == 1]; after <- rc$frp[rc$start == 501]
+plot(before, after, log = "xy", xlab = "FRP, yr 1-500", ylab = "FRP, yr 501-1000")
+abline(0, 1, lty = 2)
+mean(after < before)    # fraction of runs where FRP decreased at all
+```
+
+That fraction answers only "did FRP go down?" A more defensible test asks whether the post-change FRP falls outside the range expected under **no change**. We can build that null distribution with the model itself:
+
+```{r power}
+r0 <- run_replicates(200, sim_args = list(n_years = 500, p = 0.25, mean_size_frac = 0.02), seed = 4, verbose = FALSE)
+crit <- quantile(r0$frp, 0.05)        # one-sided, alpha = 0.05
+crit
+mean(after < crit)                    # estimated power to detect the change
+```
+
+This test assumes we know the pre-change FRP exactly. In practice we estimate it from the same short record, which adds uncertainty. A stricter version compares the ratio `after / before` with its null distribution from runs with no change.
+
+::: {.callout-note}
+## Exercise 5
+Estimate the power to detect (i) a 50% increase in *p*, (ii) a doubling of *p*, and (iii) a doubling of mean fire size, each with 100-, 250-, and 500-yr post-change records, in both simple and realistic modes. Summarize your results in a table. What do they imply for claims that fire regimes have changed over the past 30–40 years of satellite records?
+:::
+
+## 6. Limitations to keep in mind
+
+- The model has no fire-fuel feedbacks. Real fire probability often depends on time since the last fire, which makes intervals more regular than a random process (for example, Weibull intervals with shape > 1).
+- The landscape is homogeneous (topography and fuels do not vary at all) and fires are geometric shapes, so there are no unburned islands or refugia.
+- The fire-history records here record fire perfectly unless parameters are changed (e.g., `p_record < 1`: a tree experiences fire but does not leave a scar). Real data add dating error, sample-depth changes, and preferential preservation of recent records.
+
+## Reproducibility
+
+Every chunk sets a seed. `validate_firesim.R` checks the code against analytical expectations and against an independent Python implementation.
+
+## Acknowledgement of AI use
+
+The R translation of the original MATLAB model (`fireSim.m`, P. Higuera, 2012), the model revisions, the validation code, and this walkthrough were developed with AI assistance from Claude (Opus 5.5, model `claude-opus-5-5`; Anthropic) in October 2026, and reviewed by P. Higuera.
+
+```{r session}
+sessionInfo()
+```
